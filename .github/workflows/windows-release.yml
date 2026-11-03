@@ -62,19 +62,6 @@ jobs:
           }
           Write-Host "::warning title=buildlog-tail::log length $($text.Length) chars"
 
-      - name: Probe workflow write access
-        if: always()
-        shell: pwsh
-        run: |
-          $output = git push --dry-run origin HEAD:refs/heads/ci-permission-probe 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          $clean = $output.Trim() -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
-          if ($code -eq 0) {
-            Write-Host "::notice title=write-access::dry-run push accepted (contents: write)"
-          } else {
-            Write-Host "::error title=write-access-$code::$clean"
-          }
-
       - name: Read version
         id: version
         shell: pwsh

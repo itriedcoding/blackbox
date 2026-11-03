@@ -25,8 +25,8 @@
     "preflight": "node scripts/preflight.mjs",
     "prepare:win": "node scripts/prepare-win.mjs",
     "smoke": "node scripts/smoke-test.mjs",
-    "dist": "npm run icon && electron-builder --win",
-    "dist:dir": "npm run icon && electron-builder --win --dir"
+    "dist": "npm run icon && electron-builder --win --publish never",
+    "dist:dir": "npm run icon && electron-builder --win --dir --publish never"
   },
   "dependencies": {
     "node-llama-cpp": "^3.22.2"
