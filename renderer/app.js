@@ -1636,6 +1636,7 @@
         break;
       default:
         if (window.BlackboxStudio && (await window.BlackboxStudio.handle(action, element, event))) return;
+        if (window.BlackboxIde && (await window.BlackboxIde.handle(action, element, event))) return;
         break;
     }
   }
@@ -1668,13 +1669,14 @@
   // ----------------------------------------------------------------- render
 
   function renderViews() {
-    ["chat", "models", "settings", "publish", "train", "api"].forEach(function (view) {
+    ["chat", "models", "settings", "publish", "train", "api", "code"].forEach(function (view) {
       var panel = document.querySelector('[data-view-panel="' + view + '"]');
       if (panel) panel.classList.toggle("hidden", state.view !== view);
     });
     if (state.view === "models") renderModels();
     if (state.view === "settings") renderSettings();
     if (window.BlackboxStudio) window.BlackboxStudio.render(state.view);
+    if (window.BlackboxIde) window.BlackboxIde.render(state.view);
   }
 
   function renderChat() {

@@ -47,6 +47,11 @@ const DEFAULT_SETTINGS = {
   trainBatch: 1,
   trainGradAccum: 4,
   lastAdapterDir: null,
+  // code workspace
+  workspaceRoot: "",
+  recentWorkspaces: [],
+  codeMaxTokens: 1200,
+  codeTemperature: 0.25,
 };
 
 function ensureDir(dir) {

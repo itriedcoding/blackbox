@@ -35,7 +35,7 @@
       </nav>
       <div class="nav__actions">
         <a class="btn btn--ghost" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">GitHub</a>
-        <a class="btn btn--solid" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Download</a>
+        <a class="btn btn--solid" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.2.0/Blackbox-1.2.0-win-x64.exe">Download</a>
       </div>
     </header>
 
@@ -54,7 +54,7 @@
           generated locally — no account and no cloud round trip.
         </p>
         <div class="hero__cta">
-          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">
+          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.2.0/Blackbox-1.2.0-win-x64.exe">
             Download for Windows
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v8M4.6 7.6L8 11l3.4-3.4M3 13h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </a>
@@ -129,6 +129,71 @@
         </div>
       </section>
 
+      <section class="section" id="code">
+        <div class="section__head">
+          <span class="eyebrow">Code</span>
+          <h2>An editor and a shell, driven by the model on your CPU</h2>
+          <p>
+            Open a folder, edit files, run commands, and have the local model write whole files into it.
+            No snippets leave the machine.
+          </p>
+        </div>
+        <div class="grid grid--two">
+          <article class="card card--tall">
+            <span class="tag">Editor</span>
+            <h3>Folder tree, CodeMirror, conflict-aware saves</h3>
+            <p>
+              The explorer skips <code>node_modules</code>, <code>.git</code>, <code>dist</code> and other
+              build folders, and tells you when a tree is too large to list fully. Syntax modes ship for
+              TypeScript, HTML, CSS, Python, Rust, Go, Java, C/C++, SQL, YAML, shell, PHP and more; any
+              other language opens as plain text and is still editable.
+            </p>
+            <p class="muted">
+              Saving a file that changed on disk asks before overwriting instead of discarding the change.
+            </p>
+          </article>
+          <article class="card card--tall">
+            <span class="tag">Terminal</span>
+            <h3>xterm.js inside the app</h3>
+            <p>
+              A real shell starts in the open folder — <code>cmd.exe</code> on Windows — so
+              <code>npm install</code>, <code>git</code>, <code>node</code>, <code>python</code> and build
+              scripts run exactly as they do outside the app.
+            </p>
+            <p class="muted">
+              It is a pipe-backed session rather than a pty, so full-screen terminal programs that demand a
+              terminal device will complain. Credential-shaped environment variables are stripped from the
+              child process.
+            </p>
+          </article>
+        </div>
+        <div class="grid" style="margin-top:14px">
+          <article class="card">
+            <h3>Projects written by the model</h3>
+            <p>
+              Describe what you want. The model replies with whole-file blocks, the app shows the plan it
+              parsed, and only the files you tick get written. Absolute paths and <code>..</code> are
+              rejected before anything touches the disk.
+            </p>
+          </article>
+          <article class="card">
+            <h3>What it is honest about</h3>
+            <p>
+              A 1–3B abliterated model writes small projects well and large frameworks poorly, and the
+              context window bounds how much of a repository can be considered at once. There is no
+              language server, so completion is bracket and indent behaviour, not symbol analysis.
+            </p>
+          </article>
+          <article class="card">
+            <h3>No account, no cloud workspace</h3>
+            <p>
+              The editor, the shell and the model all run in the packaged app. There is no remote session,
+              no synced workspace and no telemetry about what you open.
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section class="section" id="studio">
         <div class="section__head">
           <span class="eyebrow">Studio</span>
@@ -175,12 +240,12 @@
           <article class="card">
             <h3>Windows installer</h3>
             <ol class="steps">
-              <li>Download <code>Blackbox-1.1.0-win-x64.exe</code> (400 MB) from the release page.</li>
+              <li>Download <code>Blackbox-1.2.0-win-x64.exe</code> (400 MB) from the release page.</li>
               <li>Run it. SmartScreen warns because the build is unsigned — More info → Run anyway.</li>
               <li>Open Blackbox, pick a model in <em>Models → Discover</em>, and let it download.</li>
               <li>Press Load, then type. No account step exists.</li>
             </ol>
-            <a class="btn btn--solid btn--block" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Get the .exe</a>
+            <a class="btn btn--solid btn--block" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.2.0/Blackbox-1.2.0-win-x64.exe">Get the .exe</a>
             <a class="quiet" href="https://github.com/itriedcoding/locally-uncensored-ai/releases" target="_blank" rel="noreferrer">All releases</a>
           </article>
           <article class="card">
@@ -219,7 +284,7 @@ npm start</code></pre>
         <h2>Download it and pull the network cable.</h2>
         <p>Once a model is on disk, the app never needs the internet again.</p>
         <div class="hero__cta">
-          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Download Blackbox 1.1.0</a>
+          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.2.0/Blackbox-1.2.0-win-x64.exe">Download Blackbox 1.2.0</a>
           <a class="btn btn--ghost btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">Star on GitHub</a>
         </div>
       </section>

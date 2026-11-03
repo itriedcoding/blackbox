@@ -18,6 +18,7 @@ import {
 } from "./lib/quant.js";
 import { readGgufInfo } from "./lib/gguf.js";
 import { registerStudio } from "./lib/studio-ipc.js";
+import { registerIde } from "./lib/ide-ipc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes("--dev");
@@ -511,6 +512,9 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     registerStudio({ send }).catch((error) => {
       console.error("Studio features failed to start:", error);
+    });
+    registerIde({ send, getWindow: () => mainWindow }).catch((error) => {
+      console.error("Code workspace failed to start:", error);
     });
 
     app.on("activate", () => {

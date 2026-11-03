@@ -8,6 +8,9 @@
     />
     <title>Blackbox</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="vendor/codemirror/codemirror.css" />
+    <link rel="stylesheet" href="vendor/xterm/xterm.css" />
+    <link rel="stylesheet" href="ide.css" />
   </head>
   <body>
     <div class="app">
@@ -85,6 +88,10 @@
                 <svg viewBox="0 0 16 16" class="ico" aria-hidden="true"><path d="M6.2 4.2L3 8l3.2 3.8M9.8 4.2L13 8l-3.2 3.8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
                 API
               </button>
+              <button class="ghost-btn" data-action="view" data-view="code" id="nav-code">
+                <svg viewBox="0 0 16 16" class="ico" aria-hidden="true"><path d="M5.6 4.6L2.6 8l3 3.4M10.4 4.6L13.4 8l-3 3.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                Code
+              </button>
             </div>
 
             <div class="memory">
@@ -146,6 +153,7 @@
           <section class="view hidden" id="view-publish" data-view-panel="publish"></section>
           <section class="view hidden" id="view-train" data-view-panel="train"></section>
           <section class="view hidden" id="view-api" data-view-panel="api"></section>
+          <section class="view hidden" id="view-code" data-view-panel="code"></section>
         </main>
       </div>
     </div>
@@ -154,7 +162,15 @@
     <div class="toasts" id="toasts"></div>
 
     <script src="markdown.js" defer></script>
+    <script src="vendor/codemirror/codemirror.js" defer></script>
+    <script src="vendor/codemirror/addon/matchbrackets.js" defer></script>
+    <script src="vendor/codemirror/addon/closebrackets.js" defer></script>
+    <script src="vendor/codemirror/addon/closetag.js" defer></script>
+    <script src="vendor/codemirror/addon/active-line.js" defer></script>
+    <script src="vendor/xterm/xterm.js" defer></script>
+    <script src="vendor/xterm/addon-fit.js" defer></script>
     <script src="studio.js" defer></script>
+    <script src="ide.js" defer></script>
     <script src="app.js" defer></script>
   </body>
 </html>

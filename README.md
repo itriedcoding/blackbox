@@ -6,7 +6,7 @@ A Windows desktop app for running uncensored, abliterated GGUF models **locally*
 
 ## Download
 
-Windows x64 installer: [**Releases → Blackbox-1.0.0-win-x64.exe**](https://github.com/itriedcoding/locally-uncensored-ai/releases/latest).
+Windows x64 installer: [**Releases → latest .exe**](https://github.com/itriedcoding/locally-uncensored-ai/releases/latest).
 The build is unsigned, so SmartScreen may ask you to confirm. The installer needs no network access;
 models are downloaded after launch.
 
@@ -108,7 +108,11 @@ electron/
   lib/engine.js      llama.cpp load / stream / stop / unload
   lib/quant.js       quant ranking + RAM budgeting
   lib/store.js       settings and chat persistence
+  lib/ide/           path sandbox, tree, file I/O, languages, prompt parser, shell
+  lib/ide-ipc.js     code workspace IPC (folders, files, shell, generation)
 renderer/            monochrome glass UI (no framework, no bundler)
+  ide.js / ide.css   code view: explorer, CodeMirror editor, xterm shell
+  vendor/            CodeMirror 5 and xterm.js, vendored with their licenses
 scripts/             icon generator, preflight, end-to-end smoke test
 ```
 
@@ -118,6 +122,44 @@ scripts/             icon generator, preflight, end-to-end smoke test
 - Split (`-00001-of-00002.gguf`) quants are listed but not downloadable, because this app loads single-file models.
 - Abliterated models are uncensored by construction. You are responsible for what you do with the output. Licenses are the base models' licenses — check the repo card on the Hub.
 - No telemetry, no crash reporting, no auto-update.
+
+## Code workspace
+
+**Code** turns the app into a place to build software with the local model. No
+account, no cloud IDE, no snippets sent anywhere.
+
+- **Open a folder** and the explorer reads it. `node_modules`, `.git`, `dist`,
+  `target`, `__pycache__` and friends are skipped; a huge tree reports itself as
+  partial instead of hanging the window.
+- **Editor.** CodeMirror 5 (vendored, MIT) with line numbers, bracket matching,
+  auto-closing, active-line highlight and a monochrome theme. Syntax modes ship
+  for JavaScript/TypeScript/JSX, HTML/Vue/Svelte, CSS/SCSS/Less, Python, JSON,
+  Markdown, C/C++/C#, Java, Kotlin, Scala, Objective-C, Rust, Go, SQL, YAML,
+  shell, PowerShell, PHP, Ruby, Swift, Dart, Lua, R, Haskell, CMake, TOML,
+  Dockerfile, Perl, Julia, Erlang, Clojure, CoffeeScript, VB, diff and Nginx
+  config. Anything else opens as plain text — the model can still write it.
+- **Save with conflict detection.** A file that changed on disk since you opened
+  it is reported, and overwriting is your explicit choice, not a silent loss.
+- **Terminal.** xterm.js rendering a real shell (`cmd.exe` on Windows, `$SHELL`
+  elsewhere) started in the open folder. It is a pipe-backed session, not a pty:
+  `npm`, `git`, `node`, `python`, `cargo` and scripts work normally, while
+  full-screen TUI programs that require a terminal device will complain. The
+  child environment is the user's own with credential-shaped variables
+  (`*TOKEN*`, `*SECRET*`, `*KEY*`, `*PASSWORD*`) removed.
+- **Build with the model.** Describe a project or a change. The model is asked
+  for `===FILE: path===` blocks; the reply is parsed into a plan you review,
+  and only checked files are written. Absolute paths and `..` are rejected
+  before anything touches the disk; a plan is capped at 40 files and 2 MB.
+
+Honest limits: a 1–3B abliterated model writes small, simple projects well and
+large frameworks poorly. Generation is bounded by the context window, so a repo
+of many files needs a bigger model than fits in 4 GB. The workspace reads text
+files up to 2 MB and does not embed a language server, so completion is the
+editor's bracket/indent behaviour rather than symbol-aware autocomplete.
+
+```bash
+npm run verify:ide   # path sandbox, file I/O, parser, folder walk, live shell
+```
 
 ## Publish a website
 
