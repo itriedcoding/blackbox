@@ -37,7 +37,27 @@ jobs:
         run: npm run preflight
 
       - name: Build installer
-        run: npm run dist
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run dist 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
+
+      # If packaging fails, put the build log back in the repo: job logs need a signed-in
+      # viewer, and this makes the failure diagnosable from a plain clone.
+      - name: Record build failure
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path build.log) { $lines = Get-Content build.log -Tail 500 } else { $lines = @("build.log was not created") }
+          $body = "# CI build failure" + "`n`n" + "Run: " + "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" + "`n`n```" + "`n" + ($lines -join "`n") + "`n```"
+          Set-Content -Path ci-failure.log -Value $body
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f ci-failure.log
+          git commit -m "Record Windows build failure [skip ci]"
+          git push origin HEAD:main
 
       - name: Read version
         id: version
