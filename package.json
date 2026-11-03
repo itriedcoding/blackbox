@@ -1,7 +1,7 @@
 {
   "name": "blackbox",
   "productName": "Blackbox",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Run uncensored, abliterated AI models locally on your CPU. No cloud, no GPU, no guardrails.",
   "license": "MIT",
   "private": true,
@@ -26,9 +26,11 @@
     "prepare:win": "node scripts/prepare-win.mjs",
     "smoke": "node scripts/smoke-test.mjs",
     "dist": "npm run icon && electron-builder --win --publish never",
-    "dist:dir": "npm run icon && electron-builder --win --dir --publish never"
+    "dist:dir": "npm run icon && electron-builder --win --dir --publish never",
+    "verify:site": "node scripts/verify-site.mjs"
   },
   "dependencies": {
+    "@wllama/wllama": "^3.8.1",
     "node-llama-cpp": "^3.22.2"
   },
   "devDependencies": {
@@ -62,7 +64,8 @@
       "**/*.dll",
       "**/*.so",
       "**/*.dylib",
-      "**/*.exe"
+      "**/*.exe",
+      "**/resources/trainer/**"
     ],
     "win": {
       "target": [
@@ -83,5 +86,17 @@
       "deleteAppDataOnUninstall": false,
       "shortcutName": "Blackbox"
     }
-  }
+  },
+  "files": [
+    "electron/**/*",
+    "renderer/**/*",
+    "resources/**/*",
+    "package.json",
+    "node_modules/**/*",
+    "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,LICENSE,license,*.map}",
+    "!**/node_modules/@node-llama-cpp/{linux,darwin}-*/**",
+    "!**/node_modules/@node-llama-cpp/win-arm64/**",
+    "!**/*.ts",
+    "!**/.cache/**"
+  ]
 }

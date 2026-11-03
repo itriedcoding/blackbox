@@ -27,6 +27,26 @@ const DEFAULT_SETTINGS = {
   hfToken: "",
   modelsDir: paths.models,
   activeModelPath: null,
+  // local OpenAI-compatible API
+  apiEnabled: false,
+  apiPort: 8765,
+  apiLan: false,
+  apiRequireKey: true,
+  apiRateLimit: 60,
+  // exported website
+  siteTitle: "Blackbox",
+  siteModelUrl: "",
+  siteOutDir: "",
+  // fine-tuning
+  trainBaseModel: "HuggingFaceTB/SmolLM2-135M-Instruct",
+  trainRank: 8,
+  trainAlpha: 16,
+  trainLr: 0.0002,
+  trainSteps: 20,
+  trainSeqLen: 512,
+  trainBatch: 1,
+  trainGradAccum: 4,
+  lastAdapterDir: null,
 };
 
 function ensureDir(dir) {

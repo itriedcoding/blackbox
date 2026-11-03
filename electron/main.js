@@ -17,6 +17,7 @@ import {
   ramBudget,
 } from "./lib/quant.js";
 import { readGgufInfo } from "./lib/gguf.js";
+import { registerStudio } from "./lib/studio-ipc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes("--dev");
@@ -508,6 +509,9 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     store.initStorage();
     createWindow();
+    registerStudio({ send }).catch((error) => {
+      console.error("Studio features failed to start:", error);
+    });
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

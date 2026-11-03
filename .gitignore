@@ -6,3 +6,7 @@ dist/
 *.log
 .DS_Store
 npm-debug.log*
+
+.probe/
+__pycache__/
+*.pyc

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loading…</title>
+    <meta name="description" content="A private chat interface that runs its model in your browser." />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="glow" aria-hidden="true"></div>
+    <main class="shell">
+      <header class="top">
+        <div class="brand">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="27" height="27" rx="8.5" fill="none" stroke="currentColor" stroke-width="2" />
+            <circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" />
+            <circle cx="16" cy="16" r="1.6" fill="currentColor" />
+          </svg>
+          <div>
+            <div class="brand__name" id="site-title">Blackbox</div>
+            <div class="brand__sub" id="site-tagline">runs in your browser</div>
+          </div>
+        </div>
+        <div class="status" id="status">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-text">starting</span>
+        </div>
+      </header>
+
+      <section class="thread" id="thread" aria-live="polite"></section>
+
+      <div class="gate" id="gate">
+        <div class="gate__card">
+          <div class="gate__title" id="gate-title">Loading the model</div>
+          <p class="gate__body" id="gate-body">
+            This page runs a language model on your own CPU. The first visit downloads the model file once; the browser keeps it cached.
+          </p>
+          <div class="bar"><div class="bar__fill" id="gate-fill"></div></div>
+          <div class="gate__meta" id="gate-meta">preparing</div>
+          <button class="btn" id="gate-button" hidden>Start chatting</button>
+        </div>
+      </div>
+
+      <form class="composer" id="composer">
+        <textarea id="input" rows="1" placeholder="Ask anything. Nothing leaves your browser." spellcheck="false"></textarea>
+        <div class="composer__bar">
+          <span class="composer__hint" id="hint">Enter to send · Shift+Enter for a new line</span>
+          <button class="send" id="send" type="submit" aria-label="Send">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.5V4M4.2 7.6L8 3.8l3.8 3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <button class="send send--stop" id="stop" type="button" aria-label="Stop" hidden>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="6" height="6" rx="1.2" fill="currentColor" /></svg>
+          </button>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

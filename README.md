@@ -118,3 +118,56 @@ scripts/             icon generator, preflight, end-to-end smoke test
 - Split (`-00001-of-00002.gguf`) quants are listed but not downloadable, because this app loads single-file models.
 - Abliterated models are uncensored by construction. You are responsible for what you do with the output. Licenses are the base models' licenses — check the repo card on the Hub.
 - No telemetry, no crash reporting, no auto-update.
+
+## Publish a website
+
+**Publish** exports a static site you can host anywhere (Vercel, Netlify, GitHub
+Pages, plain S3). The page runs the model in the visitor's browser through
+wllama (llama.cpp compiled to WebAssembly), so there is no inference server and
+no API key in the deployed site.
+
+- Pick a title and a direct GGUF URL (Hugging Face `resolve/main` links work).
+- **Export site** writes `index.html`, `style.css`, `app.js`, `engine.js`,
+  `config.json`, `vercel.json`, a README and the wllama runtime + wasm.
+- **Deploy to Vercel** runs `npx vercel deploy --prod` in that folder. The
+  Vercel CLI must be signed in once (`npx vercel login`); the app surfaces that
+  error rather than faking a deployment.
+
+Visitors download the GGUF once and the browser caches it. Inference is
+single-threaded WebAssembly, so it works without COOP/COEP headers.
+
+## Local API
+
+**API** starts an OpenAI-compatible server on this machine, answered by the
+model you have loaded:
+
+```
+GET  /health
+GET  /v1/models
+POST /v1/chat/completions      # stream: true or false
+```
+
+Keys are created in the app and stored only as SHA-256 hashes; each key is shown
+once. `Authorization: Bearer bb_...` is required by default, requests are rate
+limited, and LAN exposure is off unless you enable it. Verify the server with:
+
+```bash
+npm run verify:api          # real HTTP + real llama.cpp generation
+```
+
+## Fine-tuning
+
+**Fine-tune** trains a LoRA adapter on your own data with PyTorch + PEFT, on
+this CPU, with no hosted service:
+
+1. Choose a JSONL dataset (`{"messages":[...]}`, `{"prompt","completion"}` or
+   `{"instruction","output"}`) or a plain-text file.
+2. Set up the training environment once (isolated venv with CPU PyTorch).
+3. Enter a Hugging Face base model that has safetensors weights — a GGUF cannot
+   be trained directly.
+4. **Start training** streams step/loss progress; **Merge to GGUF** merges the
+   adapter into the base, converts it with llama.cpp's own converter, and adds
+   the result to your model library.
+
+Training is the heaviest feature in the app: expect minutes-to-hours depending
+on model size and data, and keep the model small on a 4 GB machine.

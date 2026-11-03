@@ -1635,6 +1635,7 @@
         closeModal();
         break;
       default:
+        if (window.BlackboxStudio && (await window.BlackboxStudio.handle(action, element, event))) return;
         break;
     }
   }
@@ -1667,12 +1668,13 @@
   // ----------------------------------------------------------------- render
 
   function renderViews() {
-    ["chat", "models", "settings"].forEach(function (view) {
+    ["chat", "models", "settings", "publish", "train", "api"].forEach(function (view) {
       var panel = document.querySelector('[data-view-panel="' + view + '"]');
       if (panel) panel.classList.toggle("hidden", state.view !== view);
     });
     if (state.view === "models") renderModels();
     if (state.view === "settings") renderSettings();
+    if (window.BlackboxStudio) window.BlackboxStudio.render(state.view);
   }
 
   function renderChat() {
@@ -1688,6 +1690,8 @@
   }
 
   // ------------------------------------------------------------------- boot
+
+  window.blackboxUI = { state: state, notify: notify, esc: esc, fmtBytes: fmtBytes };
 
   async function boot() {
     if (!api) {
