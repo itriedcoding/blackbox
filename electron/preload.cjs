@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("blackbox", {
   catalog: {
     list: () => ipcRenderer.invoke("catalog:list"),
   },
+  gateway: {
+    models: (request) => ipcRenderer.invoke("gateway:models", request),
+    setKey: (key) => ipcRenderer.invoke("gateway:set-key", key),
+    clearKey: () => ipcRenderer.invoke("gateway:clear-key"),
+  },
   hf: {
     search: (request) => ipcRenderer.invoke("hf:search", request),
     files: (request) => ipcRenderer.invoke("hf:files", request),

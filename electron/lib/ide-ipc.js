@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app, dialog, ipcMain, shell } from "electron";
 import * as store from "./store.js";
-import * as engine from "./engine.js";
+import * as llm from "./llm.js";
 import { flattenFiles, listTree } from "./ide/tree.js";
 import { ConflictError, createEntry, deleteEntry, readTextFile, renameEntry, statEntry, writeTextFile } from "./ide/files.js";
 import { languageCount, languageFor } from "./ide/languages.js";
@@ -61,7 +61,7 @@ export async function registerIde({ send, getWindow }) {
     return {
       root: state.root,
       recent: settings.recentWorkspaces ?? [],
-      model: engine.status(),
+      model: llm.status(),
       languages: languageCount(),
       shells: shells.list(),
     };
@@ -176,7 +176,7 @@ export async function registerIde({ send, getWindow }) {
     });
 
     plan = null;
-    const result = await engine.chat({
+    const result = await llm.chat({
       chatId: `code-${Date.now()}`,
       systemPrompt,
       prompt,
@@ -296,7 +296,7 @@ export async function registerIde({ send, getWindow }) {
         maxRounds: Math.max(1, Math.min(16, Number(request.maxRounds ?? DEFAULT_MAX_ROUNDS))),
         shouldStop: () => controller.stop,
         provider: async ({ systemPrompt, prompt, round }) => {
-          const response = await engine.chat({
+          const response = await llm.chat({
             chatId: `${id}-round-${round}`,
             systemPrompt,
             prompt,
@@ -327,7 +327,7 @@ export async function registerIde({ send, getWindow }) {
 
   ipcMain.handle("ide:build-stop", () => {
     if (building) building.stop = true;
-    return engine.stop();
+    return llm.stop();
   });
 
   ipcMain.handle("ide:read-many", async (_event, request = {}) => {

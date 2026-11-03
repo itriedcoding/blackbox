@@ -1,6 +1,8 @@
 # Blackbox
 
-A Windows desktop app for running uncensored, abliterated GGUF models **locally**. It downloads weights straight from the Hugging Face Hub and runs them with llama.cpp on your CPU — no cloud, no GPU, no API keys, no content filter between the model and you.
+A Windows desktop app for running uncensored, abliterated GGUF models **locally**. It downloads weights straight from the Hugging Face Hub and runs them with llama.cpp on your CPU — no cloud, no GPU, no account, and no API key required, no content filter between the model and you.
+
+If you would rather not download weights at all, **Settings → Model source** can route the same chat and code workspace through the Vercel AI Gateway with your own key. Local stays the default.
 
 ![Blackbox](build/icon.png)
 
@@ -39,6 +41,30 @@ Your RAM has to hold weights **and** the KV cache **and** the app. With 4 GB ins
 - 3B at Q4_K_M with a 4096-token context: tight; use 2048 tokens.
 
 The Settings panel shows the estimate for the loaded model against the live budget.
+
+## Model source: local or AI Gateway
+
+Generation has exactly two backends, chosen in **Settings → Model source**:
+
+- **This machine** (default) — llama.cpp with a GGUF from your disk. No account,
+  no key, no calls to a model provider.
+- **AI Gateway** — Vercel's OpenAI-compatible gateway at
+  `https://ai-gateway.vercel.sh/v1`. Create a key at Vercel → AI Gateway → API
+  Keys, paste it in, and the model list is fetched live from `GET /models`, so no
+  model name is hardcoded or guessed. Chat, *Plan only* and *Build until done*
+  all use whichever backend is selected.
+
+The key is sealed with the OS keychain (DPAPI on Windows) when it is available
+and lives only in the main process: the renderer asks for completions over IPC
+and never receives the key. `npm run verify:gateway` drives the real client
+against a local HTTP server and checks streaming, cancellation, error mapping
+and the sealing round trip.
+
+Honest limits: with the gateway selected, prompts, replies and your key leave
+this machine for the gateway URL, and usage is billed to your provider account.
+Nothing is proxied through this project's servers — there are none. If the OS
+cannot encrypt (rare on Windows), the key is only obfuscated on disk and the
+Settings panel says so instead of claiming otherwise.
 
 ## Run it
 
@@ -106,6 +132,9 @@ electron/
   lib/downloads.js   resumable GGUF downloader with progress
   lib/gguf.js        GGUF header parser (architecture, layers, KV sizing)
   lib/engine.js      llama.cpp load / stream / stop / unload
+  lib/llm.js         provider facade: local llama.cpp or the AI Gateway
+  lib/gateway.js     AI Gateway client (live model list, SSE streaming, stop)
+  lib/secrets.js     OS-encrypted storage for the gateway key
   lib/quant.js       quant ranking + RAM budgeting
   lib/store.js       settings and chat persistence
   lib/ide/           path sandbox, tree, file I/O, languages, prompt parser, build loop, shell
@@ -166,6 +195,7 @@ editor's bracket/indent behaviour rather than symbol-aware autocomplete.
 ```bash
 npm run verify:ide     # path sandbox, file I/O, parser, build loop, live shell
 npm run verify:modes   # 156 languages: load every mode, check every extension
+npm run verify:gateway # gateway client + key sealing against a real HTTP server
 ```
 
 ## Publish a website

@@ -1,7 +1,7 @@
 {
   "name": "blackbox",
   "productName": "Blackbox",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Run uncensored, abliterated AI models locally on your CPU. No cloud, no GPU, no guardrails.",
   "license": "MIT",
   "private": true,
@@ -29,7 +29,8 @@
     "dist:dir": "npm run icon && electron-builder --win --dir --publish never",
     "verify:site": "node scripts/verify-site.mjs",
     "verify:ide": "node scripts/smoke-ide.mjs",
-    "verify:modes": "node scripts/verify-modes.mjs"
+    "verify:modes": "node scripts/verify-modes.mjs",
+    "verify:gateway": "node scripts/smoke-gateway.mjs"
   },
   "dependencies": {
     "@wllama/wllama": "^3.8.1",
