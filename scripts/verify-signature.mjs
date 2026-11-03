@@ -16,7 +16,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 
-const IDENTITY = "^https://github\\.com/itriedcoding/locally-uncensored-ai/\\.github/workflows/windows-release\\.yml@.*$";
+// The repository was renamed from locally-uncensored-ai to Blackbox. Signatures
+// made before the rename carry the old identity, so both are accepted; anything
+// from another repository or workflow still fails.
+const IDENTITY =
+  "^https://github\\.com/itriedcoding/(?:locally-uncensored-ai|Blackbox)/\\.github/workflows/windows-release\\.yml@.*$";
 const ISSUER = "https://token.actions.githubusercontent.com";
 
 const [file, bundleArg] = process.argv.slice(2);

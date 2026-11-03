@@ -73,7 +73,7 @@ jobs:
           $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
           cosign verify-blob `
             --bundle "$($installer.FullName).sigstore.json" `
-            --certificate-identity-regexp "^https://github.com/itriedcoding/locally-uncensored-ai/.github/workflows/windows-release.yml@.*$" `
+            --certificate-identity-regexp "^https://github.com/itriedcoding/(locally-uncensored-ai|Blackbox)/.github/workflows/windows-release.yml@.*$" `
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
             $installer.FullName
           if ($LASTEXITCODE -ne 0) { throw "Sigstore verification failed with $LASTEXITCODE" }

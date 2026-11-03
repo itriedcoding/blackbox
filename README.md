@@ -134,7 +134,7 @@ or call `cosign` directly:
 ```bash
 cosign verify-blob \
   --bundle Blackbox-1.6.0-win-x64.exe.sigstore.json \
-  --certificate-identity-regexp '^https://github\.com/itriedcoding/locally-uncensored-ai/\.github/workflows/windows-release\.yml@.*$' \
+  --certificate-identity-regexp '^https://github\.com/itriedcoding/(locally-uncensored-ai|Blackbox)/\.github/workflows/windows-release\.yml@.*$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   Blackbox-1.6.0-win-x64.exe
 ```
