@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blackbox interface preview</title>
+    <link rel="stylesheet" href="./app-theme.css" />
+    <style>
+      /* the live app uses a textarea here; the static preview needs the same box */
+      .composer__fake {
+        min-height: 44px;
+        padding: 4px 2px 10px;
+        color: var(--ink-muted);
+        font-size: 14.5px;
+      }
+      .composer__fake::after {
+        content: "";
+        display: block;
+        width: 7px;
+        height: 16px;
+        margin-top: 8px;
+        background: var(--ink);
+        opacity: 0.55;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="titlebar">
+        <div class="titlebar__drag">
+          <div class="brand">
+            <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="27" height="27" rx="8.5" fill="none" stroke="currentColor" stroke-width="2" />
+              <circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" />
+              <circle cx="16" cy="16" r="1.6" fill="currentColor" />
+            </svg>
+            <span class="brand__name">BLACKBOX</span>
+            <span class="brand__tag">local · uncensored</span>
+          </div>
+          <div class="titlebar__status">
+            <span class="status-dot is-live"></span><span>Qwen2.5-0.5B-Instruct-abliterated · CPU</span>
+          </div>
+        </div>
+        <div class="titlebar__controls">
+          <button class="winbtn" aria-label="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor" stroke-width="1.2" /></svg></button>
+          <button class="winbtn" aria-label="Maximize"><svg viewBox="0 0 12 12"><rect x="2.6" y="2.6" width="6.8" height="6.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.2" /></svg></button>
+          <button class="winbtn winbtn--close" aria-label="Close"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2" /></svg></button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="rail">
+          <div class="rail__top">
+            <button class="btn btn--primary btn--block">
+              <svg viewBox="0 0 16 16" class="ico" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
+              New chat
+            </button>
+          </div>
+          <div class="rail__section">
+            <div class="rail__label">Conversations</div>
+            <div class="chat-list">
+              <button class="chat-item is-active"><span class="chat-item__title">Memory guard on 4 GB</span></button>
+              <button class="chat-item"><span class="chat-item__title">Quant comparison</span></button>
+              <button class="chat-item"><span class="chat-item__title">Local API smoke test</span></button>
+            </div>
+          </div>
+          <div class="rail__bottom">
+            <div class="model-card">
+              <div class="model-card__top"><span class="status-dot is-live"></span><span class="model-card__label">Model</span></div>
+              <div class="model-card__name">Qwen2.5 0.5B abliterated</div>
+              <div class="model-card__meta">4096 ctx · CPU · qwen2</div>
+            </div>
+            <div class="rail__actions">
+              <button class="ghost-btn">Models</button>
+              <button class="ghost-btn">Settings</button>
+            </div>
+            <div class="memory">
+              <div class="memory__row"><span>System memory</span><span class="mono">2.1 GB free</span></div>
+              <div class="memory__bar"><div class="memory__fill" style="width: 46%"></div></div>
+            </div>
+          </div>
+        </aside>
+
+        <main class="stage">
+          <section class="view">
+            <div class="chat-head">
+              <div class="chat-head__left">
+                <h1 class="chat-title">Memory guard on 4 GB</h1>
+                <div class="chat-sub">Qwen2.5 0.5B abliterated · 4096 context · CPU only</div>
+              </div>
+            </div>
+
+            <div class="messages">
+              <div class="msg msg--user"><div class="msg__body">Why did the app refuse to load a 3B model on my 4 GB laptop?</div></div>
+              <div class="msg msg--assistant">
+                <div class="msg__body">Because the weights and the KV cache together did not fit. The loader reads the GGUF header, computes the cache size from the layer count, head count and context length, and compares that against the machine's budget. A 3B Q4_K_M needs roughly 2 GB for weights and another half gigabyte for a 4096-token cache, which leaves nothing for Windows.</div>
+              </div>
+              <div class="msg msg--user"><div class="msg__body">And if I lower the context to 2048?</div></div>
+              <div class="msg msg--assistant">
+                <div class="msg__body">It fits with less headroom. Halving the context halves the KV cache, so the estimate drops by about 250 MB. The guard would still warn on a busy machine, but you can override it deliberately instead of discovering the limit through a swap storm.</div>
+              </div>
+            </div>
+
+            <div class="composer-wrap">
+              <div class="composer glass">
+                <div class="composer__fake">Ask anything. Nothing leaves this machine.</div>
+                <div class="composer__bar">
+                  <span class="chip chip--model"><span class="status-dot status-dot--sm is-live"></span><span>Qwen2.5 0.5B</span></span>
+                  <div class="composer__spacer"></div>
+                  <span class="composer__hint">Enter to send · Shift+Enter for a new line</span>
+                  <span class="send-btn"><svg viewBox="0 0 16 16"><path d="M8 12.5V4M4.2 7.6L8 3.8l3.8 3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+                </div>
+              </div>
+              <div class="composer-foot">Runs entirely on this machine · no account · no telemetry · no filters</div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

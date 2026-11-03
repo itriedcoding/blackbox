@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blackbox — uncensored AI on your own CPU</title>
+    <meta
+      name="description"
+      content="A Windows desktop app that runs uncensored, abliterated GGUF models locally. No cloud, no GPU, no guardrails. Publish a site, expose an API, fine-tune on your own data."
+    />
+    <meta property="og:title" content="Blackbox — uncensored AI on your own CPU" />
+    <meta
+      property="og:description"
+      content="Local GGUF inference on CPU. Download models from Hugging Face, publish a browser-inference site, serve an OpenAI-compatible API, fine-tune on your data."
+    />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <div class="aurora" aria-hidden="true"></div>
+
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="Blackbox home">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2.5" y="2.5" width="27" height="27" rx="8.5" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="16" cy="16" r="1.6" fill="currentColor" />
+        </svg>
+        <span>BLACKBOX</span>
+      </a>
+      <nav class="nav__links" aria-label="Sections">
+        <a href="#features">Features</a>
+        <a href="#preview">Preview</a>
+        <a href="#studio">Studio</a>
+        <a href="#install">Install</a>
+      </nav>
+      <div class="nav__actions">
+        <a class="btn btn--ghost" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">GitHub</a>
+        <a class="btn btn--solid" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Download</a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero__badges">
+          <span class="pill">Windows x64 · 400 MB</span>
+          <span class="pill">CPU only</span>
+          <span class="pill">Runs offline</span>
+          <span class="pill">MIT</span>
+        </div>
+        <h1>Your machine.<br />Your model. <span class="fade">No one else's rules.</span></h1>
+        <p class="hero__lead">
+          Blackbox is a desktop app that runs uncensored, abliterated GGUF models on your CPU.
+          Models come straight from Hugging Face, weights stay on your disk, and every token is
+          generated locally — no account and no cloud round trip.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">
+            Download for Windows
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v8M4.6 7.6L8 11l3.4-3.4M3 13h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </a>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5H3.5v9h9V10M9.5 3.5H13v3.5M13 3.5L7.5 9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            Source on GitHub
+          </a>
+        </div>
+        <p class="hero__note">Unsigned build: Windows SmartScreen shows “unrecognised app” until you choose More info → Run anyway.</p>
+
+        <div class="specs">
+          <div><span>Memory</span><strong>4 GB+</strong></div>
+          <div><span>GPU</span><strong>Not required</strong></div>
+          <div><span>Network</span><strong>Only for downloads</strong></div>
+          <div><span>Engine</span><strong>llama.cpp</strong></div>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section__head">
+          <span class="eyebrow">What it does</span>
+          <h2>Everything stays on the box</h2>
+          <p>No proxy, no telemetry, no hidden system prompt layered over yours.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Real local inference</h3>
+            <p>llama.cpp through node-llama-cpp. Streaming tokens, stop mid-reply, context rebuilt from your transcript. Your CPU does the work.</p>
+          </article>
+          <article class="card">
+            <h3>Models from Hugging Face</h3>
+            <p>Search the Hub, inspect a repo's GGUF files, and download resumably. The app reads each file's GGUF header and refuses models that won't fit in RAM.</p>
+          </article>
+          <article class="card">
+            <h3>RAM guard, not guesswork</h3>
+            <p>KV cache is computed from the model's own header before loading, so a 4 GB machine gets a clear answer instead of a swap storm.</p>
+          </article>
+          <article class="card">
+            <h3>Zero guardrails in the path</h3>
+            <p>No moderation layer, no refusal prompt, no server policy. The model answers with its own weights and your system prompt.</p>
+          </article>
+          <article class="card">
+            <h3>Import what you already have</h3>
+            <p>Drop a <code>.gguf</code> into the model folder or add it from disk. Downloaded files are verified against their byte size.</p>
+          </article>
+          <article class="card">
+            <h3>Monochrome glass UI</h3>
+            <p>Built with the platform's own widgets and a single accent: none. Keyboard-first composer, honest status line, no decorative noise.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="preview">
+        <div class="section__head">
+          <span class="eyebrow">Interface</span>
+          <h2>The actual app, not a mock-up</h2>
+          <p>
+            This frame renders the desktop app's own stylesheet and layout. It is a still preview —
+            the downloads below are the working build.
+          </p>
+        </div>
+        <div class="frame">
+          <div class="frame__bar">
+            <span></span><span></span><span></span>
+            <em>Blackbox · local · uncensored</em>
+          </div>
+          <iframe class="frame__screen" src="./preview.html" title="Blackbox interface preview" loading="lazy"></iframe>
+          <div class="frame__caption">
+            <span>Interface preview</span>
+            <button class="link-btn" id="open-preview" type="button">Open full size</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="studio">
+        <div class="section__head">
+          <span class="eyebrow">Studio</span>
+          <h2>Three things the app can do beyond chatting</h2>
+          <p>Each one runs on this machine. Nothing is proxied to a service.</p>
+        </div>
+        <div class="grid grid--three">
+          <article class="card card--tall">
+            <span class="tag">Publish</span>
+            <h3>A website that runs the model in the visitor's browser</h3>
+            <p>
+              Export a static site with the wllama runtime and a single GGUF URL. Visitors download
+              the model once and generate on their own CPU. Deploy the folder to Vercel, Netlify or
+              any static host — there is no inference server to pay for.
+            </p>
+          </article>
+          <article class="card card--tall">
+            <span class="tag">API</span>
+            <h3>OpenAI-compatible access for your own tools</h3>
+            <p>
+              Start a local server exposing <code>/v1/chat/completions</code> and
+              <code>/v1/models</code>, with bearer keys stored as hashes, streaming responses and
+              per-key rate limits. Point any OpenAI client at it.
+            </p>
+          </article>
+          <article class="card card--tall">
+            <span class="tag">Fine-tune</span>
+            <h3>LoRA training on your own data</h3>
+            <p>
+              Feed it JSONL chat data or plain text, provision an isolated CPU PyTorch environment,
+              train an adapter, then merge it and convert to GGUF with llama.cpp's converter so the
+              result loads in the app.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="install">
+        <div class="section__head">
+          <span class="eyebrow">Install</span>
+          <h2>Two ways in</h2>
+        </div>
+        <div class="grid grid--two">
+          <article class="card">
+            <h3>Windows installer</h3>
+            <ol class="steps">
+              <li>Download <code>Blackbox-1.1.0-win-x64.exe</code> (400 MB) from the release page.</li>
+              <li>Run it. SmartScreen warns because the build is unsigned — More info → Run anyway.</li>
+              <li>Open Blackbox, pick a model in <em>Models → Discover</em>, and let it download.</li>
+              <li>Press Load, then type. No account step exists.</li>
+            </ol>
+            <a class="btn btn--solid btn--block" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Get the .exe</a>
+            <a class="quiet" href="https://github.com/itriedcoding/locally-uncensored-ai/releases" target="_blank" rel="noreferrer">All releases</a>
+          </article>
+          <article class="card">
+            <h3>From source</h3>
+            <pre class="code"><code>git clone https://github.com/itriedcoding/locally-uncensored-ai
+cd locally-uncensored-ai
+npm install
+npm run preflight
+npm start</code></pre>
+            <p class="muted">
+              Needs Node 20+ and a C++ toolchain for llama.cpp's prebuilt binaries. The README covers
+              packaging for Windows.
+            </p>
+            <a class="btn btn--ghost btn--block" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">Read the README</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--models">
+        <div class="section__head">
+          <span class="eyebrow">Tested models</span>
+          <h2>Small enough for a laptop, uncensored by design</h2>
+          <p>Abliterated GGUF repositories the app has been run against, from 0.5B to 3B.</p>
+        </div>
+        <div class="models">
+          <a href="https://huggingface.co/mradermacher/Qwen2.5-0.5B-Instruct-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Qwen2.5 0.5B</span><em>~400 MB Q4_K_M</em></a>
+          <a href="https://huggingface.co/mradermacher/Llama-3.2-1B-Instruct-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Llama 3.2 1B</span><em>~800 MB Q4_K_M</em></a>
+          <a href="https://huggingface.co/mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Qwen2.5 1.5B</span><em>~1 GB Q4_K_M</em></a>
+          <a href="https://huggingface.co/mradermacher/Qwen3-1.7B-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Qwen3 1.7B</span><em>~1.1 GB Q4_K_M</em></a>
+          <a href="https://huggingface.co/mradermacher/gemma-2-2b-it-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Gemma 2 2B</span><em>~1.6 GB Q4_K_M</em></a>
+          <a href="https://huggingface.co/QuantFactory/Llama-3.2-3B-Instruct-abliterated-GGUF" target="_blank" rel="noreferrer"><span>Llama 3.2 3B</span><em>~2 GB Q4_K_M</em></a>
+        </div>
+      </section>
+
+      <section class="cta">
+        <h2>Download it and pull the network cable.</h2>
+        <p>Once a model is on disk, the app never needs the internet again.</p>
+        <div class="hero__cta">
+          <a class="btn btn--solid btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai/releases/download/v1.1.0/Blackbox-1.1.0-win-x64.exe">Download Blackbox 1.1.0</a>
+          <a class="btn btn--ghost btn--lg" href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">Star on GitHub</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="2.5" y="2.5" width="27" height="27" rx="8.5" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="16" cy="16" r="5.5" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="16" cy="16" r="1.6" fill="currentColor" />
+        </svg>
+        <span>Blackbox · MIT · built on llama.cpp</span>
+      </div>
+      <nav>
+        <a href="https://github.com/itriedcoding/locally-uncensored-ai" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/itriedcoding/locally-uncensored-ai/releases" target="_blank" rel="noreferrer">Releases</a>
+        <a href="https://github.com/itriedcoding/locally-uncensored-ai/issues" target="_blank" rel="noreferrer">Issues</a>
+        <a href="https://huggingface.co/models?filter=gguf" target="_blank" rel="noreferrer">Hugging Face</a>
+      </nav>
+    </footer>
+
+    <script src="./site.js" defer></script>
+  </body>
+</html>
