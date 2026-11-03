@@ -52,13 +52,6 @@ const DEFAULT_SETTINGS = {
   recentWorkspaces: [],
   codeMaxTokens: 1200,
   codeTemperature: 0.25,
-  // generation backend: "local" (llama.cpp on this machine) or "gateway"
-  provider: "local",
-  gatewayBaseUrl: "https://ai-gateway.vercel.sh/v1",
-  gatewayModel: "",
-  gatewayApiKey: "",
-  gatewayKeyHint: "",
-  gatewayKeyEncrypted: false,
 };
 
 function ensureDir(dir) {

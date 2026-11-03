@@ -1,13 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 
 import * as store from "./lib/store.js";
 import * as hf from "./lib/hf.js";
-import * as llm from "./lib/llm.js";
-import * as gateway from "./lib/gateway.js";
-import { openSecret, redactSettings, sealSecret } from "./lib/secrets.js";
+import * as engine from "./lib/engine.js";
 import { systemInfo, threadOptions } from "./lib/system.js";
 import { CURATED_MODELS } from "./lib/catalog.js";
 import { DownloadManager } from "./lib/downloads.js";
@@ -236,7 +234,7 @@ ipcMain.handle("app:open-external", async (_event, url) => {
 
 // -------------------------------------------------------------- IPC: settings
 
-ipcMain.handle("settings:get", () => redactSettings(store.readSettings()));
+ipcMain.handle("settings:get", () => store.readSettings());
 
 ipcMain.handle("settings:set", (_event, patch) => {
   const allowed = {};
@@ -263,51 +261,9 @@ ipcMain.handle("settings:set", (_event, patch) => {
   if (allowed.hfToken !== undefined) {
     allowed.hfToken = String(allowed.hfToken ?? "").trim();
   }
-  // The sealed key is never accepted through a settings patch; only the
-  // dedicated handlers below can change it.
-  delete allowed.gatewayApiKey;
-  if (allowed.provider !== undefined) {
-    allowed.provider = allowed.provider === "gateway" ? "gateway" : "local";
-  }
-  if (allowed.gatewayBaseUrl !== undefined) {
-    allowed.gatewayBaseUrl = gateway.normalizeBaseUrl(allowed.gatewayBaseUrl);
-  }
-  if (allowed.gatewayModel !== undefined) {
-    allowed.gatewayModel = String(allowed.gatewayModel ?? "").trim().slice(0, 200);
-  }
   const next = store.writeSettings(allowed);
   catalogCache.at = 0;
-  return redactSettings(next);
-});
-
-// ------------------------------------------------------- IPC: AI Gateway
-
-ipcMain.handle("gateway:models", async (_event, request = {}) => {
-  const settings = store.readSettings();
-  const apiKey = String(request.apiKey ?? "").trim() || openSecret(settings.gatewayApiKey, safeStorage);
-  const result = await gateway.listModels({
-    apiKey,
-    baseUrl: request.baseUrl ?? settings.gatewayBaseUrl,
-  });
-  const saved = String(settings.gatewayModel ?? "");
-  return {
-    baseUrl: result.baseUrl,
-    models: result.models,
-    current: result.models.some((model) => model.id === saved) ? saved : null,
-  };
-});
-
-ipcMain.handle("gateway:set-key", (_event, apiKey) => {
-  const key = String(apiKey ?? "").trim();
-  if (key.length < 12) throw new Error("That does not look like a gateway key. Copy the whole value from the AI Gateway keys page.");
-  const sealed = sealSecret(key, safeStorage);
-  const next = store.writeSettings(sealed);
-  return redactSettings(next);
-});
-
-ipcMain.handle("gateway:clear-key", () => {
-  const next = store.writeSettings({ gatewayApiKey: "", gatewayKeyHint: "", gatewayKeyEncrypted: false });
-  return redactSettings(next);
+  return next;
 });
 
 // ------------------------------------------------------------ IPC: Hugging Face
@@ -408,7 +364,7 @@ ipcMain.handle("models:delete", async (_event, target) => {
   if (!file.startsWith(root + path.sep) || !/\.gguf$/i.test(file)) {
     throw new Error("Refusing to delete a file outside the model folder.");
   }
-  if (llm.status().modelPath === file) await llm.unload();
+  if (engine.status().modelPath === file) await engine.unload();
   fs.rmSync(file, { force: true });
   fs.rmSync(`${file}.json`, { force: true });
   ggufCache.delete(file);
@@ -445,7 +401,7 @@ ipcMain.handle("models:import", async () => {
 
 // ----------------------------------------------------------------- IPC: engine
 
-ipcMain.handle("engine:status", () => llm.status());
+ipcMain.handle("engine:status", () => engine.status());
 
 ipcMain.handle("engine:load", async (_event, request = {}) => {
   const settings = store.readSettings();
@@ -469,7 +425,7 @@ ipcMain.handle("engine:load", async (_event, request = {}) => {
     }
   }
 
-  const result = await llm.load({
+  const result = await engine.load({
     modelPath,
     contextSize,
     threads,
@@ -480,16 +436,16 @@ ipcMain.handle("engine:load", async (_event, request = {}) => {
   return { blocked: false, status: result };
 });
 
-ipcMain.handle("engine:unload", async () => llm.unload());
+ipcMain.handle("engine:unload", async () => engine.unload());
 
-ipcMain.handle("engine:stop", () => llm.stop());
+ipcMain.handle("engine:stop", () => engine.stop());
 
 // ------------------------------------------------------------------- IPC: chat
 
 ipcMain.handle("chat:start", async (event, request = {}) => {
   try {
     const settings = store.readSettings();
-    const result = await llm.chat({
+    const result = await engine.chat({
       chatId: request.chatId,
       systemPrompt: request.systemPrompt ?? settings.systemPrompt,
       history: request.history ?? [],
@@ -508,7 +464,7 @@ ipcMain.handle("chat:start", async (event, request = {}) => {
   }
 });
 
-ipcMain.handle("chat:stop", () => llm.stop());
+ipcMain.handle("chat:stop", () => engine.stop());
 
 // ------------------------------------------------------------------ IPC: chats
 
@@ -567,11 +523,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("window-all-closed", async () => {
-    await llm.disposeAll().catch(() => {});
+    await engine.disposeAll().catch(() => {});
     if (process.platform !== "darwin") app.quit();
   });
 
   app.on("before-quit", async () => {
-    await llm.disposeAll().catch(() => {});
+    await engine.disposeAll().catch(() => {});
   });
 }

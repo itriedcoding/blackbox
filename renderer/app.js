@@ -30,15 +30,14 @@
     search: { query: "", uncensoredOnly: true, results: null, loading: false, error: null, ran: false },
     repoInput: "",
     downloads: new Map(),
-    engine: { provider: "local", loaded: false, modelName: null, modelPath: null, contextSize: null, gpu: false, busy: false, gateway: null },
+    engine: { loaded: false, modelName: null, modelPath: null, contextSize: null, gpu: false, busy: false },
     loading: null,
     streaming: { active: false, chatId: null, stopping: false },
     streamNode: null,
     pinned: true,
     settingsSaveTimer: null,
     searchTimer: null,
-    diagnostics: null,
-    gateway: { models: null, loading: false, error: null }
+    diagnostics: null
   };
 
   // ---------------------------------------------------------------- helpers
@@ -176,23 +175,6 @@
       .replace(/__/g, " · ");
   }
 
-  function activeModelName() {
-    if (state.engine.provider === "gateway") return state.engine.modelName || "No gateway model";
-    return modelDisplayName(state.engine.modelPath);
-  }
-
-  function gatewayHost(url) {
-    try {
-      return new URL(String(url)).host;
-    } catch (error) {
-      return "gateway";
-    }
-  }
-
-  function isGateway() {
-    return state.engine.provider === "gateway";
-  }
-
   function paintTitleStatus() {
     var el = document.getElementById("titlebar-status");
     if (!el) return;
@@ -243,25 +225,23 @@
     var meta = document.getElementById("rail-model-meta");
     if (!dot || !name || !meta) return;
 
-    var remote = isGateway();
     dot.className = "status-dot" + (state.engine.loaded ? " is-live" : "");
-    name.textContent = state.engine.loaded ? activeModelName() : remote ? "No gateway model" : "None loaded";
+    name.textContent = state.engine.loaded ? modelDisplayName(state.engine.modelPath) : "None loaded";
 
-    var metaText = remote ? "AI Gateway · add a key in Settings" : "Choose a model to begin";
+    var metaText = "Choose a model to begin";
     if (state.loading) {
       metaText = (state.loading.message || "Loading") + (state.loading.progress ? " " + Math.round(state.loading.progress * 100) + "%" : "");
     } else if (state.engine.loaded) {
-      metaText = remote
-        ? "AI Gateway · " + gatewayHost(state.engine.gateway && state.engine.gateway.baseUrl)
-        : (state.engine.contextSize ? state.engine.contextSize + " ctx · " : "") +
-          (state.engine.gpu ? String(state.engine.gpu) : "CPU") +
-          (state.engine.fileInfo && state.engine.fileInfo.architecture ? " · " + state.engine.fileInfo.architecture : "");
+      metaText =
+        (state.engine.contextSize ? state.engine.contextSize + " ctx · " : "") +
+        (state.engine.gpu ? String(state.engine.gpu) : "CPU") +
+        (state.engine.fileInfo && state.engine.fileInfo.architecture ? " · " + state.engine.fileInfo.architecture : "");
     }
     meta.textContent = metaText;
 
     var chipName = document.getElementById("composer-model-name");
     var chipDot = document.getElementById("composer-dot");
-    if (chipName) chipName.textContent = state.engine.loaded ? activeModelName() : remote ? "No gateway model" : "No model";
+    if (chipName) chipName.textContent = state.engine.loaded ? modelDisplayName(state.engine.modelPath) : "No model";
     if (chipDot) chipDot.className = "status-dot status-dot--sm" + (state.engine.loaded ? " is-live" : "");
   }
 
@@ -274,12 +254,9 @@
     var foot = document.getElementById("composer-foot");
 
     if (title) title.textContent = state.chat ? state.chat.title : "New conversation";
-    var remote = isGateway();
     if (sub) {
       if (state.loading) sub.textContent = (state.loading.message || "Loading model") + "…";
-      else if (state.engine.loaded && remote) {
-        sub.textContent = activeModelName() + " · via AI Gateway · " + ((state.engine.gateway && state.engine.gateway.keyHint) || "your key");
-      } else if (state.engine.loaded) {
+      else if (state.engine.loaded) {
         sub.textContent =
           modelDisplayName(state.engine.modelPath) +
           " · " +
@@ -287,19 +264,15 @@
           " context · " +
           (state.engine.gpu ? String(state.engine.gpu) + " + CPU" : "CPU only");
       } else {
-        sub.textContent = remote ? "Add an AI Gateway key in Settings, or switch back to a local model." : "No model loaded. Pick one to start generating.";
+        sub.textContent = "No model loaded. Pick one to start generating.";
       }
     }
 
     if (composerEl) {
       composerEl.disabled = !state.engine.loaded;
       composerEl.placeholder = state.engine.loaded
-        ? remote
-          ? "Ask anything. Prompts go to the AI Gateway with your key."
-          : "Ask anything. Nothing leaves this machine."
-        : remote
-          ? "Add a gateway key and model to start writing."
-          : "Load a model to start writing.";
+        ? "Ask anything. Nothing leaves this machine."
+        : "Load a model to start writing.";
     }
 
     if (sendBtn) {
@@ -314,19 +287,13 @@
       hint.textContent = state.streaming.active
         ? state.streaming.stopping
           ? "Stopping…"
-          : remote
-            ? "Streaming from the AI Gateway"
-            : "Streaming tokens from your CPU"
+          : "Streaming tokens from your CPU"
         : "Enter to send · Shift+Enter for a new line";
     }
     if (foot) {
-      foot.textContent = remote
-        ? state.engine.loaded
-          ? "Answered by the AI Gateway · billed to your provider account · key stays in the main process"
-          : "Local models need no key. The gateway needs yours."
-        : state.engine.loaded
-          ? "Runs entirely on this machine · no account · no telemetry · no filters"
-          : "No cloud, no GPU required, no content filter in the path.";
+      foot.textContent = state.engine.loaded
+        ? "Runs entirely on this machine · no account · no telemetry · no filters"
+        : "No cloud, no GPU required, no content filter in the path.";
     }
   }
 
@@ -423,19 +390,6 @@
   }
 
   function emptyChatHtml() {
-    if (isGateway() && !state.engine.loaded) {
-      return (
-        '<div class="empty">' +
-        RING_MARK +
-        '<div class="empty__title">Run a model without the download</div>' +
-        '<p class="empty__text">Add an AI Gateway key and pick a model, and a hosted model answers instead of a file on disk. Local GGUF models still run with no key at all.</p>' +
-        '<div class="empty__actions"><button class="btn btn--primary" data-action="view" data-view="settings">Add gateway key</button>' +
-        '<button class="btn btn--ghost" data-action="view" data-view="models">Use a local model</button></div>' +
-        '<p class="empty__text" style="font-size:11.5px;color:var(--ink-ghost)">The key is encrypted on this machine and never reaches the window.</p>' +
-        "</div>"
-      );
-    }
-
     if (!state.engine.loaded) {
       return (
         '<div class="empty">' +
@@ -459,16 +413,13 @@
       '<div class="empty">' +
       RING_MARK +
       '<div class="empty__title">' +
-      esc(activeModelName()) +
-      (isGateway() ? " · AI Gateway" : "") +
+      esc(modelDisplayName(state.engine.modelPath)) +
       " is loaded</div>" +
       '<p class="empty__text">' +
-      (isGateway()
-        ? esc("Answers stream from the gateway, billed to your provider account")
-        : esc((state.engine.contextSize || state.settings.contextSize) + " token context · ") +
-          esc(state.engine.gpu ? String(state.engine.gpu) + " + CPU" : "CPU") +
-          " · " +
-          esc(state.settings.threads + " threads")) +
+      esc((state.engine.contextSize || state.settings.contextSize) + " token context · ") +
+      esc(state.engine.gpu ? String(state.engine.gpu) + " + CPU" : "CPU") +
+      " · " +
+      esc(state.settings.threads + " threads") +
       "</p>" +
       '<div class="prompt-grid">' +
       prompts
@@ -1190,8 +1141,6 @@
       esc(info ? info.platform + " " + info.arch : "") +
       "</p></div></div>" +
       '<div class="settings-grid">' +
-      // model source
-      gatewayPanelHtml() +
       // performance
       '<div class="panel"><div class="panel__title">Memory & compute</div><p class="panel__sub">Applied the next time a model loads.</p>' +
       '<div class="field-row"><label class="field-row__label" for="set-threads">CPU threads</label>' +
@@ -1275,183 +1224,6 @@
     refreshDiagnostics();
   }
 
-  function providerButton(provider, label, active) {
-    return (
-      '<button type="button" class="seg__btn' +
-      (active ? " is-active" : "") +
-      '" data-action="set-provider" data-provider="' +
-      provider +
-      '">' +
-      esc(label) +
-      "</button>"
-    );
-  }
-
-  function gatewayPanelHtml() {
-    var settings = state.settings;
-    var gatewayState = state.gateway || {};
-    var remote = settings.provider === "gateway";
-    var keySet = Boolean(settings.gatewayKeySet);
-    var models = gatewayState.models;
-    var ids = models
-      ? models.map(function (model) {
-          return model.id;
-        })
-      : [];
-    var current = settings.gatewayModel || "";
-    if (current && ids.indexOf(current) === -1) current = "";
-
-    var keyStatus = keySet
-      ? "Saved " +
-        esc(settings.gatewayKeyHint || "") +
-        " · " +
-        (settings.gatewayKeyEncrypted ? "encrypted by this OS" : "stored without OS encryption")
-      : "No key saved";
-
-    var options = '<option value=""' + (current ? "" : " selected") + ">Choose a model...</option>";
-    options += ids
-      .map(function (id) {
-        return '<option value="' + esc(id) + '"' + (id === current ? " selected" : "") + ">" + esc(id) + "</option>";
-      })
-      .join("");
-
-    var modelHint = gatewayState.loading
-      ? "Loading the live model list from the gateway…"
-      : gatewayState.error
-        ? esc(gatewayState.error)
-        : models
-          ? ids.length + " models available with this key."
-          : "Refresh to load the models this key can use.";
-
-    var body = remote
-      ? '<div class="field-row"><label class="field-row__label" for="set-gateway-key">API key</label>' +
-        '<div style="display:flex;gap:6px"><input type="password" id="set-gateway-key" placeholder="' +
-        (keySet ? "Replace the saved key" : "Paste your AI Gateway key") +
-        '" spellcheck="false" autocomplete="off" style="flex:1;min-width:0" />' +
-        '<button type="button" class="btn btn--sm btn--primary" data-action="gateway-save-key">Save</button></div>' +
-        '<div class="field-row__hint">' +
-        keyStatus +
-        ". Create one at Vercel → AI Gateway → API Keys. It is sent only to the gateway." +
-        "</div>" +
-        (keySet ? '<div><button type="button" class="btn btn--sm btn--ghost" data-action="gateway-clear-key">Remove key</button></div>' : "") +
-        "</div>" +
-        '<div class="field-row"><label class="field-row__label" for="set-gateway-url">Gateway URL</label>' +
-        '<input type="text" id="set-gateway-url" data-setting="gatewayBaseUrl" data-kind="string" value="' +
-        esc(settings.gatewayBaseUrl || "") +
-        '" spellcheck="false" />' +
-        '<div class="field-row__hint">Any OpenAI-compatible base URL, including a gateway you host yourself.</div></div>' +
-        '<div class="field-row"><label class="field-row__label" for="set-gateway-model">Model</label>' +
-        '<select id="set-gateway-model" data-setting="gatewayModel" data-kind="string">' +
-        options +
-        "</select>" +
-        '<div class="field-row__hint">' +
-        modelHint +
-        "</div></div>" +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn--sm" data-action="gateway-refresh"' +
-        (keySet ? "" : " disabled") +
-        ">Refresh models</button>" +
-        '<button type="button" class="btn btn--sm btn--ghost" data-action="view" data-view="chat">Back to chat</button></div>'
-      : "";
-
-    return (
-      '<div class="panel"><div class="panel__title">Model source</div><p class="panel__sub">Run a GGUF file on this machine, or send prompts to the AI Gateway with your own key.</p>' +
-      '<div class="seg">' +
-      providerButton("local", "This machine", !remote) +
-      providerButton("gateway", "AI Gateway", remote) +
-      "</div>" +
-      '<div class="field-row__hint" style="margin-top:8px">' +
-      (remote
-        ? "Prompts leave this machine and go to the gateway URL below, billed to your key."
-        : "Nothing leaves this machine. No account, no key, and no calls to a model provider.") +
-      "</div>" +
-      body +
-      "</div>"
-    );
-  }
-
-  async function syncEngine() {
-    state.engine = Object.assign(state.engine, await api.engine.status());
-    paintRailModel();
-    paintChatChrome();
-    paintTitleStatus();
-    renderMessages();
-  }
-
-  async function setProvider(provider) {
-    if (provider !== "local" && provider !== "gateway") return;
-    if (state.settings.provider === provider) return;
-    try {
-      state.settings = await api.settings.set({ provider: provider });
-      await syncEngine();
-      renderSettings();
-      notify(provider === "gateway" ? "Generation now goes through the AI Gateway." : "Generation now runs on this machine.");
-      if (provider === "gateway" && state.settings.gatewayKeySet) await refreshGatewayModels();
-    } catch (error) {
-      notify("Could not switch provider: " + error.message, true);
-    }
-  }
-
-  async function saveGatewayKey() {
-    var input = document.getElementById("set-gateway-key");
-    var value = input ? input.value.trim() : "";
-    if (!value) {
-      notify("Paste a gateway key first.", true);
-      return;
-    }
-    try {
-      state.settings = await api.gateway.setKey(value);
-      await syncEngine();
-      notify(
-        state.settings.gatewayKeyEncrypted
-          ? "Key saved and encrypted by this OS."
-          : "Key saved. This machine offers no OS encryption, so it is only obfuscated on disk.",
-      );
-      renderSettings();
-      await refreshGatewayModels();
-    } catch (error) {
-      notify(error.message, true);
-    }
-  }
-
-  async function clearGatewayKey() {
-    try {
-      state.settings = await api.gateway.clearKey();
-      state.gateway.models = null;
-      state.gateway.error = null;
-      await syncEngine();
-      renderSettings();
-      notify("Gateway key removed.");
-    } catch (error) {
-      notify(error.message, true);
-    }
-  }
-
-  async function refreshGatewayModels() {
-    if (!state.settings.gatewayKeySet) {
-      notify("Save a gateway key first.", true);
-      return;
-    }
-    state.gateway.loading = true;
-    state.gateway.error = null;
-    if (state.view === "settings") renderSettings();
-    try {
-      var result = await api.gateway.models({});
-      state.gateway.models = result.models;
-      if (!state.settings.gatewayModel || !result.models.some(function (model) { return model.id === state.settings.gatewayModel; })) {
-        if (result.models.length === 1) {
-          state.settings = await api.settings.set({ gatewayModel: result.models[0].id });
-        }
-      }
-      await syncEngine();
-    } catch (error) {
-      state.gateway.models = null;
-      state.gateway.error = error.message;
-    } finally {
-      state.gateway.loading = false;
-      if (state.view === "settings") renderSettings();
-    }
-  }
-
   function estimateKv(contextSize) {
     var info = state.engine.fileInfo;
     var perToken = info && info.kvBytesPerToken ? info.kvBytesPerToken : 30000;
@@ -1460,40 +1232,10 @@
 
   var settingsBound = false;
 
-  function bindGatewayActions(host) {
-    host.addEventListener(
-      "click",
-      function (event) {
-        var target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
-        if (!target || !host.contains(target)) return;
-        var action = target.getAttribute("data-action");
-        if (action === "set-provider") {
-          event.preventDefault();
-          event.stopPropagation();
-          setProvider(target.getAttribute("data-provider"));
-        } else if (action === "gateway-save-key") {
-          event.preventDefault();
-          event.stopPropagation();
-          saveGatewayKey();
-        } else if (action === "gateway-clear-key") {
-          event.preventDefault();
-          event.stopPropagation();
-          clearGatewayKey();
-        } else if (action === "gateway-refresh") {
-          event.preventDefault();
-          event.stopPropagation();
-          refreshGatewayModels();
-        }
-      },
-      true,
-    );
-  }
-
   function bindSettingsInputs() {
     var host = document.getElementById("view-settings");
     if (!host || settingsBound) return;
     settingsBound = true;
-    bindGatewayActions(host);
 
     host.addEventListener("input", function (event) {
       var target = event.target;
@@ -1507,7 +1249,7 @@
         var readout = document.getElementById(target.id + "-value");
         if (readout) readout.textContent = key === "maxTokens" ? String(Math.round(value)) : Number(value).toFixed(2);
       }
-      if (key === "hfToken" || key === "systemPrompt" || key === "gatewayBaseUrl") return;
+      if (key === "hfToken" || key === "systemPrompt") return;
       scheduleSettingsSave(key);
     });
 
@@ -1545,10 +1287,7 @@
   async function saveSettingsIgnoringErrors() {
     try {
       state.settings = await api.settings.set(state.settings);
-      state.engine = Object.assign(state.engine, await api.engine.status());
       paintChatChrome();
-      paintRailModel();
-      paintTitleStatus();
     } catch (error) {
       notify("Could not save settings: " + error.message, true);
     }
@@ -2080,10 +1819,6 @@
 
     if (state.settings.activeModelPath && state.models.some(function (model) { return model.path === state.settings.activeModelPath; })) {
       await loadModel(state.settings.activeModelPath);
-    }
-
-    if (state.settings.provider === "gateway" && state.settings.gatewayKeySet) {
-      refreshGatewayModels();
     }
 
     if (state.view === "chat" && state.engine.loaded && composerEl) composerEl.focus();

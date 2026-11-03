@@ -1,8 +1,6 @@
 # Blackbox
 
-A Windows desktop app for running uncensored, abliterated GGUF models **locally**. It downloads weights straight from the Hugging Face Hub and runs them with llama.cpp on your CPU — no cloud, no GPU, no account, and no API key required, no content filter between the model and you.
-
-If you would rather not download weights at all, **Settings → Model source** can route the same chat and code workspace through the Vercel AI Gateway with your own key. Local stays the default.
+A Windows desktop app for running uncensored, abliterated GGUF models **locally**. It downloads weights straight from the Hugging Face Hub and runs them with llama.cpp on your CPU — no cloud, no GPU, no API keys, no content filter between the model and you.
 
 ![Blackbox](build/icon.png)
 
@@ -41,30 +39,6 @@ Your RAM has to hold weights **and** the KV cache **and** the app. With 4 GB ins
 - 3B at Q4_K_M with a 4096-token context: tight; use 2048 tokens.
 
 The Settings panel shows the estimate for the loaded model against the live budget.
-
-## Model source: local or AI Gateway
-
-Generation has exactly two backends, chosen in **Settings → Model source**:
-
-- **This machine** (default) — llama.cpp with a GGUF from your disk. No account,
-  no key, no calls to a model provider.
-- **AI Gateway** — Vercel's OpenAI-compatible gateway at
-  `https://ai-gateway.vercel.sh/v1`. Create a key at Vercel → AI Gateway → API
-  Keys, paste it in, and the model list is fetched live from `GET /models`, so no
-  model name is hardcoded or guessed. Chat, *Plan only* and *Build until done*
-  all use whichever backend is selected.
-
-The key is sealed with the OS keychain (DPAPI on Windows) when it is available
-and lives only in the main process: the renderer asks for completions over IPC
-and never receives the key. `npm run verify:gateway` drives the real client
-against a local HTTP server and checks streaming, cancellation, error mapping
-and the sealing round trip.
-
-Honest limits: with the gateway selected, prompts, replies and your key leave
-this machine for the gateway URL, and usage is billed to your provider account.
-Nothing is proxied through this project's servers — there are none. If the OS
-cannot encrypt (rare on Windows), the key is only obfuscated on disk and the
-Settings panel says so instead of claiming otherwise.
 
 ## Run it
 
@@ -111,11 +85,41 @@ The icon comes from `npm run icon` (pure Node, no image tooling) and is generate
 Pushing to `main` or a `v*` tag runs `.github/workflows/windows-release.yml`, which builds the installer
 on `windows-latest` and attaches it to the matching GitHub release, so the download stays reproducible.
 
+## Code signing and the SmartScreen prompt
+
+The blue "Windows protected your PC" panel is SmartScreen. It has exactly one
+real fix: a code-signing certificate issued by a certificate authority Windows
+already trusts. No certificate is bundled with this repo, so the published
+installers are unsigned and the prompt stays until you supply one. A self-signed
+certificate does not help — Windows does not trust it as a publisher, so the
+prompt remains and the installer looks worse, not better.
+
+To sign releases:
+
+1. Obtain a certificate. **Azure Trusted Signing** is the cheapest route; an
+   OV or EV code-signing certificate from a CA (DigiCert, Sectigo, SSL.com, …)
+   works too. Export it as a `.pfx` with a password.
+2. Base64-encode the `.pfx` — `certutil -encode cert.pfx cert.b64` on Windows,
+   `base64 -w0 cert.pfx` elsewhere.
+3. In the repository: **Settings → Secrets and variables → Actions**, add
+   `CSC_LINK` (the base64 text) and `CSC_KEY_PASSWORD` (the `.pfx` password).
+4. Re-run the release workflow. `electron-builder` signs the installer and the
+   executable inside it because `CSC_LINK` is present, and the workflow now
+   calls `Get-AuthenticodeSignature` and **fails if signing was configured but
+   the installer is not `Valid`**, so an unsigned artifact cannot slip out.
+
+What to expect after signing, honestly: an **OV** certificate starts with no
+SmartScreen reputation, so some machines keep warning until enough installs
+accumulate; **EV** certificates and Azure Trusted Signing are trusted
+immediately. Reputation belongs to the certificate, not to a file hash, so it
+survives app updates that are signed with the same certificate.
+
 ## Verify the engine
 
 ```bash
 npm run smoke          # real Hub search, real 400 MB download, real generation, real stop
 npm run smoke -- --hf-only   # skip the model download
+npm run verify:hf      # live huggingface.co: search, repo metadata, GGUF listing
 ```
 
 The smoke test exercises the exact modules the app uses: `electron/lib/hf.js`, `downloads.js`, `gguf.js`, `quant.js`, `engine.js`. It downloads `mradermacher/Qwen2.5-0.5B-Instruct-abliterated-GGUF`, generates text, aborts mid-stream, runs a follow-up turn, then unloads.
@@ -132,9 +136,6 @@ electron/
   lib/downloads.js   resumable GGUF downloader with progress
   lib/gguf.js        GGUF header parser (architecture, layers, KV sizing)
   lib/engine.js      llama.cpp load / stream / stop / unload
-  lib/llm.js         provider facade: local llama.cpp or the AI Gateway
-  lib/gateway.js     AI Gateway client (live model list, SSE streaming, stop)
-  lib/secrets.js     OS-encrypted storage for the gateway key
   lib/quant.js       quant ranking + RAM budgeting
   lib/store.js       settings and chat persistence
   lib/ide/           path sandbox, tree, file I/O, languages, prompt parser, build loop, shell
@@ -195,7 +196,6 @@ editor's bracket/indent behaviour rather than symbol-aware autocomplete.
 ```bash
 npm run verify:ide     # path sandbox, file I/O, parser, build loop, live shell
 npm run verify:modes   # 156 languages: load every mode, check every extension
-npm run verify:gateway # gateway client + key sealing against a real HTTP server
 ```
 
 ## Publish a website

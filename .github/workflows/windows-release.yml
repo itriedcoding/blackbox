@@ -36,13 +36,36 @@ jobs:
       - name: Verify llama.cpp runtime
         run: npm run preflight
 
+      # electron-builder signs automatically when CSC_LINK holds a base64 .pfx and
+      # CSC_KEY_PASSWORD holds its password. Without those secrets the build is
+      # unsigned, which is why Windows shows the SmartScreen prompt for it.
       - name: Build installer
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
           npm run dist 2>&1 | Tee-Object -FilePath build.log
           if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
+
+      # A build that was supposed to be signed must not ship silently unsigned.
+      - name: Verify installer signature
+        shell: pwsh
+        env:
+          SIGNING_EXPECTED: ${{ secrets.CSC_LINK != '' }}
+        run: |
+          $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer was not produced." }
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          Write-Host "Authenticode status: $($signature.Status)"
+          if ($signature.SignerCertificate) { Write-Host "Signer: $($signature.SignerCertificate.Subject)" }
+          if ($env:SIGNING_EXPECTED -eq "true") {
+            if ($signature.Status -ne "Valid") { throw "CSC_LINK is configured but the installer signature is $($signature.Status)." }
+            Write-Host "::notice title=signed::Installer signature is valid."
+          } else {
+            Write-Host "::warning title=unsigned::No CSC_LINK secret is configured, so this installer is unsigned and Windows SmartScreen will warn."
+          }
 
       # Job logs are only readable when signed in. Annotations are rendered on the public
       # run page, so surface the tail of the build log there when packaging fails.
