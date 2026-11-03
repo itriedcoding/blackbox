@@ -44,20 +44,36 @@ jobs:
           npm run dist 2>&1 | Tee-Object -FilePath build.log
           if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
 
-      # If packaging fails, put the build log back in the repo: job logs need a signed-in
-      # viewer, and this makes the failure diagnosable from a plain clone.
-      - name: Record build failure
+      # Job logs are only readable when signed in. Annotations are rendered on the public
+      # run page, so surface the tail of the build log there when packaging fails.
+      - name: Report build failure
         if: failure()
         shell: pwsh
         run: |
-          if (Test-Path build.log) { $lines = Get-Content build.log -Tail 500 } else { $lines = @("build.log was not created") }
-          $body = "# CI build failure" + "`n`n" + "Run: " + "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" + "`n`n```" + "`n" + ($lines -join "`n") + "`n```"
-          Set-Content -Path ci-failure.log -Value $body
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f ci-failure.log
-          git commit -m "Record Windows build failure [skip ci]"
-          git push origin HEAD:main
+          if (Test-Path build.log) { $text = Get-Content build.log -Raw } else { $text = "build.log was not created" }
+          $text = $text -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
+          $size = 3000
+          $count = [Math]::Min(10, [Math]::Ceiling($text.Length / $size))
+          for ($i = 0; $i -lt $count; $i++) {
+            $start = $i * $size
+            if ($start -ge $text.Length) { break }
+            $len = [Math]::Min($size, $text.Length - $start)
+            Write-Host "::error title=buildlog$i::$($text.Substring($start, $len))"
+          }
+          Write-Host "::warning title=buildlog-tail::log length $($text.Length) chars"
+
+      - name: Probe workflow write access
+        if: always()
+        shell: pwsh
+        run: |
+          $output = git push --dry-run origin HEAD:refs/heads/ci-permission-probe 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $clean = $output.Trim() -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A"
+          if ($code -eq 0) {
+            Write-Host "::notice title=write-access::dry-run push accepted (contents: write)"
+          } else {
+            Write-Host "::error title=write-access-$code::$clean"
+          }
 
       - name: Read version
         id: version
