@@ -38,6 +38,8 @@
     settingsSaveTimer: null,
     searchTimer: null,
     diagnostics: null,
+    perf: { memory: null, recommendation: null, error: null },
+    perfTimer: null,
     updates: { status: "idle", current: null, latest: null, manifest: null, percent: null, error: null }
   };
 
@@ -398,7 +400,7 @@
         '<div class="empty__title">Run a model that answers you</div>' +
         '<p class="empty__text">Blackbox runs abliterated GGUF models directly on this machine\'s CPU. No API keys, no accounts, no GPU, no output filtering between the model and you.</p>' +
         '<div class="empty__actions"><button class="btn btn--primary" data-action="view" data-view="models">Choose a model</button>' +
-        '<button class="btn btn--ghost" data-action="view" data-view="settings">Tune memory</button></div>' +
+        '<button class="btn btn--ghost" data-action="view" data-view="performance">Tune memory</button></div>' +
         '<p class="empty__text" style="font-size:11.5px;color:var(--ink-ghost)">A 0.5B quant runs in under 1 GB. A 3B at Q4_K_M runs in about 2.5 GB.</p>' +
         "</div>"
       );
@@ -1126,57 +1128,23 @@
     var settings = state.settings;
     var info = state.info;
 
-    var threadOptions = info ? info.threadOptions.slice() : [2, 4, 6, 8];
-    if (threadOptions.indexOf(settings.threads) === -1) {
-      threadOptions.push(settings.threads);
-      threadOptions.sort(function (a, b) {
-        return a - b;
-      });
-    }
-
-    var contextChoices = [1024, 2048, 4096, 8192, 16384];
-    if (contextChoices.indexOf(settings.contextSize) === -1) contextChoices.push(settings.contextSize);
-
     host.innerHTML =
       '<div class="page"><div class="page__head"><div><h2 class="page__title">Settings</h2><p class="page__sub">stored on this machine · ' +
       esc(info ? info.platform + " " + info.arch : "") +
       "</p></div></div>" +
       '<div class="settings-grid">' +
-      // performance
-      '<div class="panel"><div class="panel__title">Memory & compute</div><p class="panel__sub">Applied the next time a model loads.</p>' +
-      '<div class="field-row"><label class="field-row__label" for="set-threads">CPU threads</label>' +
-      '<select id="set-threads" data-setting="threads" data-kind="number">' +
-      threadOptions
-        .map(function (option) {
-          return '<option value="' + option + '"' + (option === settings.threads ? " selected" : "") + ">" + option + " threads</option>";
-        })
-        .join("") +
-      "</select>" +
-      '<div class="field-row__hint">' +
-      esc(info ? info.cpuModel + " · " + info.cores + " logical cores" : "") +
-      "</div></div>" +
-      '<div class="field-row"><label class="field-row__label" for="set-context">Context window</label>' +
-      '<select id="set-context" data-setting="contextSize" data-kind="number">' +
-      contextChoices
-        .map(function (choice) {
-          return (
-            '<option value="' + choice + '"' + (choice === settings.contextSize ? " selected" : "") + ">" + choice + " tokens" + (state.engine.loaded ? " · ~" + fmtBytes(estimateKv(choice)) + " KV" : "") + "</option>"
-          );
-        })
-        .join("") +
-      "</select>" +
-      '<div class="field-row__hint">Bigger context costs RAM up front. 2048–4096 keeps a 4 GB machine comfortable.</div></div>' +
-      '<div class="field-row"><label class="field-row__label" for="set-gpu">Acceleration</label>' +
-      '<select id="set-gpu" data-setting="gpu" data-kind="string">' +
-      '<option value="auto"' +
-      (settings.gpu === "auto" ? " selected" : "") +
-      ">Auto (use GPU when present)</option>" +
-      '<option value="cpu"' +
-      (settings.gpu === "cpu" ? " selected" : "") +
-      ">CPU only</option>" +
-      "</select>" +
-      '<div class="field-row__hint">This build never requires a GPU. Auto simply uses one if llama.cpp finds a supported device.</div></div>' +
-      '<div class="meter" id="set-meter"></div>' +
+      // performance link
+      '<div class="panel"><div class="panel__title">Memory & compute</div><p class="panel__sub">Threads, context window, live RAM and the optimizer live on their own page.</p>' +
+      '<div class="kv"><span>Threads</span><span class="kv__value">' +
+      esc(settings.threads) +
+      "</span></div>" +
+      '<div class="kv"><span>Context window</span><span class="kv__value">' +
+      esc(settings.contextSize) +
+      " tokens</span></div>" +
+      '<div class="kv"><span>Acceleration</span><span class="kv__value">' +
+      esc(settings.gpu === "auto" ? "GPU when available" : "CPU only") +
+      "</span></div>" +
+      '<div><button class="btn btn--sm" data-action="view" data-view="performance">Open Performance</button></div>' +
       "</div>" +
       // generation
       '<div class="panel"><div class="panel__title">Generation</div><p class="panel__sub">Defaults for every new message in this app.</p>' +
@@ -1221,7 +1189,7 @@
       "</div>" +
       "</div></div>";
 
-    bindSettingsInputs();
+    bindSettingControls("view-settings");
     refreshDiagnostics();
   }
 
@@ -1231,12 +1199,12 @@
     return perToken * contextSize;
   }
 
-  var settingsBound = false;
+  var boundSettingHosts = {};
 
-  function bindSettingsInputs() {
-    var host = document.getElementById("view-settings");
-    if (!host || settingsBound) return;
-    settingsBound = true;
+  function bindSettingControls(hostId) {
+    var host = document.getElementById(hostId);
+    if (!host || boundSettingHosts[hostId]) return;
+    boundSettingHosts[hostId] = true;
 
     host.addEventListener("input", function (event) {
       var target = event.target;
@@ -1269,6 +1237,174 @@
       }
       if (key === "contextSize") refreshDiagnostics();
     });
+  }
+
+  // ------------------------------------------------------------- performance
+
+  function perfLiveHtml(memory, status) {
+    if (!memory) return '<div class="empty-small" style="text-align:left;padding:0">Reading memory…</div>';
+    var used = Math.max(0, memory.totalMem - memory.freeMem);
+    var usedPercent = memory.totalMem > 0 ? Math.min(100, (used / memory.totalMem) * 100) : 0;
+    var rows = [
+      ["System RAM", fmtBytes(used) + " used / " + fmtBytes(memory.totalMem)],
+      ["Free right now", fmtBytes(memory.freeMem)],
+      ["Model budget", fmtBytes(memory.budget) + " · what a model may use"],
+      ["These Blackbox processes", fmtBytes(memory.appBytes)]
+    ];
+    if (status.loaded) {
+      rows.push(["Weights loaded", fmtBytes(memory.modelBytes)]);
+      rows.push(["KV cache", fmtBytes(memory.kvBytes) + " at " + (status.contextSize || "?") + " tokens"]);
+      rows.push(["Free if unloaded", fmtBytes(memory.freeAfterModel)]);
+    }
+    return (
+      rows
+        .map(function (row) {
+          return '<div class="kv"><span>' + esc(row[0]) + '</span><span class="kv__value">' + esc(row[1]) + "</span></div>";
+        })
+        .join("") +
+      '<div class="meter" style="margin-top:8px"><div class="meter__bar"><div class="meter__used" style="width:' +
+      usedPercent.toFixed(1) +
+      '%"></div></div><div class="legend"><span><i></i>all processes on this machine</span></div></div>'
+    );
+  }
+
+  function perfRecommendationHtml(rec) {
+    if (!rec) return '<div class="empty-small" style="text-align:left;padding:0">Measuring…</div>';
+    return (
+      '<div class="kv"><span>Threads</span><span class="kv__value">' +
+      esc(rec.threads) +
+      "</span></div>" +
+      '<div class="kv"><span>Context window</span><span class="kv__value">' +
+      esc(rec.contextSize) +
+      " tokens</span></div>" +
+      '<div class="kv"><span>Acceleration</span><span class="kv__value">' +
+      esc(rec.gpu === "auto" ? "GPU when available" : "CPU only") +
+      "</span></div>" +
+      (rec.estimate
+        ? '<div class="kv"><span>Weights + context</span><span class="kv__value">' + esc(fmtBytes(rec.estimate)) + "</span></div>" +
+          '<div class="kv"><span>Headroom left</span><span class="kv__value">' + esc(fmtBytes(rec.headroomBytes)) + "</span></div>"
+        : "") +
+      '<div class="field-row__hint">' +
+      esc(rec.reason) +
+      "</div>"
+    );
+  }
+
+  function paintPerformance() {
+    var live = document.getElementById("perf-live");
+    if (live) live.innerHTML = perfLiveHtml(state.perf.memory, state.engine);
+    var recommendation = document.getElementById("perf-recommendation");
+    if (recommendation) recommendation.innerHTML = perfRecommendationHtml(state.perf.recommendation);
+  }
+
+  async function refreshPerformance() {
+    if (state.view !== "performance") return;
+    try {
+      state.perf.memory = await api.system.memory();
+      if (state.info && state.info.memory) {
+        state.info.memory = state.perf.memory;
+        paintMemory();
+      }
+      if (!state.perf.recommendation) {
+        state.perf.recommendation = await api.system.recommend({ modelPath: state.engine.modelPath || undefined });
+      }
+      state.perf.error = null;
+    } catch (error) {
+      state.perf.error = error.message;
+    }
+    paintPerformance();
+  }
+
+  function startPerfPolling() {
+    stopPerfPolling();
+    state.perfTimer = setInterval(function () {
+      if (state.view !== "performance") {
+        stopPerfPolling();
+        return;
+      }
+      refreshPerformance();
+    }, 2000);
+  }
+
+  function stopPerfPolling() {
+    if (state.perfTimer) {
+      clearInterval(state.perfTimer);
+      state.perfTimer = null;
+    }
+  }
+
+  function renderPerformance() {
+    var host = document.getElementById("view-performance");
+    if (!host) return;
+    var settings = state.settings;
+    var info = state.info;
+
+    var threadOptions = info ? info.threadOptions.slice() : [2, 4, 6, 8];
+    if (threadOptions.indexOf(settings.threads) === -1) {
+      threadOptions.push(settings.threads);
+      threadOptions.sort(function (a, b) {
+        return a - b;
+      });
+    }
+
+    var contextChoices = [1024, 2048, 4096, 8192, 16384];
+    if (contextChoices.indexOf(settings.contextSize) === -1) contextChoices.push(settings.contextSize);
+
+    host.innerHTML =
+      '<div class="page"><div class="page__head"><div><h2 class="page__title">Performance</h2><p class="page__sub">live memory on this machine · measured locally, never sent anywhere</p></div>' +
+      '<div style="display:flex;gap:6px"><button class="btn btn--sm btn--ghost" data-action="refresh-perf">Refresh</button></div></div>' +
+      '<div class="settings-grid">' +
+      '<div class="panel"><div class="panel__title">Memory right now</div><p class="panel__sub">Refreshes every two seconds while this page is open.</p>' +
+      '<div id="perf-live">' +
+      perfLiveHtml(state.perf.memory, state.engine) +
+      "</div>" +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn--sm btn--ghost" data-action="free-memory">Free RAM now</button>' +
+      (state.engine.loaded ? '<button class="btn btn--sm btn--ghost" data-action="unload-model">Unload model</button>' : "") +
+      "</div>" +
+      '<div class="field-row__hint">Free RAM unloads the model and releases llama.cpp entirely. The next message loads it again.</div></div>' +
+      '<div class="panel"><div class="panel__title">Recommended for this machine</div><p class="panel__sub">Sized from the RAM budget and the model file itself, not a fixed guess.</p>' +
+      '<div id="perf-recommendation">' +
+      perfRecommendationHtml(state.perf.recommendation) +
+      "</div>" +
+      '<div><button class="btn btn--sm btn--primary" data-action="optimize-memory">Optimize now</button></div></div>' +
+      '<div class="panel"><div class="panel__title">Controls</div><p class="panel__sub">Applied the next time a model loads. Optimize sets all three at once.</p>' +
+      '<div class="field-row"><label class="field-row__label" for="set-threads">CPU threads</label>' +
+      '<select id="set-threads" data-setting="threads" data-kind="number">' +
+      threadOptions
+        .map(function (option) {
+          return '<option value="' + option + '"' + (option === settings.threads ? " selected" : "") + ">" + option + " threads</option>";
+        })
+        .join("") +
+      "</select>" +
+      '<div class="field-row__hint">' +
+      esc(info ? info.cpuModel + " · " + info.cores + " logical cores" : "") +
+      "</div></div>" +
+      '<div class="field-row"><label class="field-row__label" for="set-context">Context window</label>' +
+      '<select id="set-context" data-setting="contextSize" data-kind="number">' +
+      contextChoices
+        .map(function (choice) {
+          return (
+            '<option value="' + choice + '"' + (choice === settings.contextSize ? " selected" : "") + ">" + choice + " tokens" + (state.engine.loaded ? " · ~" + fmtBytes(estimateKv(choice)) + " KV" : "") + "</option>"
+          );
+        })
+        .join("") +
+      "</select>" +
+      '<div class="field-row__hint">Bigger context costs RAM up front. 2048–4096 keeps a 4 GB machine comfortable.</div></div>' +
+      '<div class="field-row"><label class="field-row__label" for="set-gpu">Acceleration</label>' +
+      '<select id="set-gpu" data-setting="gpu" data-kind="string">' +
+      '<option value="auto"' +
+      (settings.gpu === "auto" ? " selected" : "") +
+      ">Auto (use GPU when present)</option>" +
+      '<option value="cpu"' +
+      (settings.gpu === "cpu" ? " selected" : "") +
+      ">CPU only</option>" +
+      "</select>" +
+      '<div class="field-row__hint">This build never requires a GPU. Auto simply uses one if llama.cpp finds a supported device.</div></div>' +
+      "</div>" +
+      "</div></div>";
+
+    bindSettingControls("view-performance");
+    refreshPerformance();
   }
 
   function scheduleSettingsSave(key) {
@@ -1411,6 +1547,8 @@
       notify("Loaded " + modelDisplayName(modelPath));
       await persistChat();
       renderSettings();
+      state.perf.recommendation = null;
+      if (state.view === "performance") renderPerformance();
     } catch (error) {
       notify(error.message, true);
     } finally {
@@ -1428,6 +1566,7 @@
     try {
       state.engine = Object.assign({}, await api.engine.unload());
       notify("Model unloaded. RAM released.");
+      state.perf.recommendation = null;
       refreshMemory();
       renderAll();
     } catch (error) {
@@ -1742,6 +1881,62 @@
         await persistChat();
         break;
       }
+      case "refresh-perf":
+        state.perf.recommendation = null;
+        await refreshPerformance();
+        break;
+      case "optimize-memory": {
+        try {
+          var optimized = await api.system.optimize({
+            modelPath: state.engine.modelPath || state.settings.activeModelPath || undefined
+          });
+          state.settings = optimized.settings;
+          state.perf.recommendation = optimized;
+          if (state.view === "performance") renderPerformance();
+          paintPerformance();
+          paintChatChrome();
+          renderRail();
+          notify(
+            "Optimized: " +
+              (optimized.changes && optimized.changes.length ? optimized.changes.join(", ") : "already at the recommended values") +
+              "."
+          );
+          if (optimized.reloadRequired && state.engine.modelPath) {
+            var reload = await confirmDialog({
+              title: "Reload the model now?",
+              subtitle: "Applying " + optimized.contextSize + " tokens · " + optimized.threads + " threads",
+              message:
+                "These settings only take effect when the model is loaded again. Reloading frees the current context first, then loads " +
+                modelDisplayName(state.engine.modelPath) +
+                " with " +
+                optimized.threads +
+                " threads and a " +
+                optimized.contextSize +
+                "-token window.",
+              confirmLabel: "Reload now",
+              cancelLabel: "Later"
+            });
+            if (reload) await loadModel(state.engine.modelPath, { force: true });
+          }
+        } catch (error) {
+          notify(error.message, true);
+        }
+        break;
+      }
+      case "free-memory": {
+        try {
+          var freed = await api.system.freeMemory();
+          state.engine = Object.assign({}, freed.status);
+          state.perf.memory = freed.memory;
+          state.perf.recommendation = null;
+          notify("Model unloaded and llama.cpp released. " + fmtBytes(freed.memory.freeMem) + " free now.");
+          renderAll();
+          await refreshPerformance();
+        } catch (error) {
+          notify(error.message, true);
+        }
+        break;
+      }
       case "open-sampling":
         openSamplingModal();
         break;
@@ -1790,12 +1985,18 @@
   // ----------------------------------------------------------------- render
 
   function renderViews() {
-    ["chat", "models", "settings", "publish", "train", "api", "code"].forEach(function (view) {
+    ["chat", "models", "settings", "performance", "publish", "train", "api", "code"].forEach(function (view) {
       var panel = document.querySelector('[data-view-panel="' + view + '"]');
       if (panel) panel.classList.toggle("hidden", state.view !== view);
     });
     if (state.view === "models") renderModels();
     if (state.view === "settings") renderSettings();
+    if (state.view === "performance") {
+      renderPerformance();
+      startPerfPolling();
+    } else {
+      stopPerfPolling();
+    }
     if (window.BlackboxStudio) window.BlackboxStudio.render(state.view);
     if (window.BlackboxIde) window.BlackboxIde.render(state.view);
   }

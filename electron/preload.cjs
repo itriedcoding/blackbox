@@ -11,6 +11,10 @@ function subscribe(channel) {
 contextBridge.exposeInMainWorld("blackbox", {
   system: {
     info: () => ipcRenderer.invoke("system:info"),
+    memory: () => ipcRenderer.invoke("system:memory"),
+    recommend: (request) => ipcRenderer.invoke("system:recommend", request),
+    optimize: (request) => ipcRenderer.invoke("system:optimize", request),
+    freeMemory: () => ipcRenderer.invoke("system:free-memory"),
     openModelsFolder: () => ipcRenderer.invoke("system:open-models-folder"),
     openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
   },

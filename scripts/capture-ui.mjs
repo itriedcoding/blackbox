@@ -168,6 +168,21 @@ async function main() {
   await sleep(1800);
   await cdp.screenshot("ui-settings.png");
 
+  // Performance view: live memory + the optimizer, both through real IPC.
+  await cdp.evaluate('document.querySelector(\'[data-action="view"][data-view="performance"]\').click()');
+  await sleep(2200);
+  const perfState = await cdp.evaluate(`({
+    title: document.querySelector("#view-performance .page__title")?.textContent,
+    live: [...document.querySelectorAll("#perf-live .kv")].map((row) => row.innerText.replace(/\\s+/g, " ")),
+    recommendation: [...document.querySelectorAll("#perf-recommendation .kv")].map((row) => row.innerText.replace(/\\s+/g, " ")),
+    reason: document.querySelector("#perf-recommendation .field-row__hint")?.textContent,
+    optimizeButton: Boolean(document.querySelector(\'[data-action="optimize-memory"]\')),
+    freeButton: Boolean(document.querySelector(\'[data-action="free-memory"]\')),
+    controls: [...document.querySelectorAll("#view-performance select")].map((select) => select.id + "=" + select.value)
+  })`);
+  console.log(`  performance view: ${JSON.stringify(perfState)}`);
+  await cdp.screenshot("ui-performance.png");
+
   if (modelPath) {
     await cdp.evaluate('document.querySelector(\'[data-action="view"][data-view="chat"]\').click()');
     await sleep(500);

@@ -18,6 +18,7 @@ import {
   ramBudget,
 } from "./lib/quant.js";
 import { readGgufInfo } from "./lib/gguf.js";
+import { describeChanges, recommendSettings } from "./lib/optimize.js";
 import { registerStudio } from "./lib/studio-ipc.js";
 import { registerIde } from "./lib/ide-ipc.js";
 import * as updates from "./lib/updates.js";
@@ -39,6 +40,59 @@ function send(channel, payload) {
 function memoryPicture() {
   const { totalMem, freeMem } = systemInfo();
   return { totalMem, freeMem, budget: ramBudget({ totalMem, freeMem }) };
+}
+
+function appFootprintBytes() {
+  try {
+    return app.getAppMetrics().reduce((sum, metric) => sum + (metric.memory?.workingSetSize ?? 0) * 1024, 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** What the machine has, what this app holds, and what the loaded model costs. */
+function liveMemory() {
+  const picture = memoryPicture();
+  const status = engine.status();
+  const result = { ...picture, appBytes: appFootprintBytes(), modelBytes: 0, kvBytes: 0 };
+  if (status.loaded && status.modelPath) {
+    try {
+      const info = readGgufCached(status.modelPath);
+      const contextSize = status.contextSize ?? store.readSettings().contextSize;
+      result.modelBytes = Math.round(info.fileSize * 1.04);
+      result.kvBytes = Math.max(0, estimateTotalBytes(info.fileSize, info, contextSize) - result.modelBytes);
+    } catch {
+      /* metadata is best effort: leave the numbers at zero rather than invent them */
+    }
+  }
+  result.freeAfterModel = Math.max(0, picture.freeMem - result.modelBytes - result.kvBytes);
+  return result;
+}
+
+/** Recommendation for one model file, or for the active model when none is given. */
+function recommendFor(modelPath) {
+  const settings = store.readSettings();
+  const target = String(modelPath ?? settings.activeModelPath ?? engine.status().modelPath ?? "");
+  let fileSize = 0;
+  let fileInfo = null;
+  if (target && fs.existsSync(target)) {
+    try {
+      fileSize = fs.statSync(target).size;
+      fileInfo = readGgufCached(target);
+    } catch {
+      fileSize = 0;
+      fileInfo = null;
+    }
+  }
+  const picture = memoryPicture();
+  const recommendation = recommendSettings({
+    budget: picture.budget,
+    fileSize,
+    fileInfo,
+    cores: systemInfo().cores,
+    gpuDetected: Boolean(engine.status().gpu),
+  });
+  return { ...recommendation, memory: picture, modelPath: fileSize ? target : null, current: settings };
 }
 
 function readGgufCached(filePath) {
@@ -219,6 +273,31 @@ ipcMain.handle("system:info", () => {
     paths: { models: store.modelsDirectory(settings), root: store.paths.root },
     platform: process.platform,
   };
+});
+
+ipcMain.handle("system:memory", () => liveMemory());
+
+ipcMain.handle("system:recommend", (_event, request = {}) => recommendFor(request.modelPath));
+
+ipcMain.handle("system:optimize", (_event, request = {}) => {
+  const recommendation = recommendFor(request.modelPath);
+  const settings = store.writeSettings({
+    threads: recommendation.threads,
+    contextSize: recommendation.contextSize,
+    gpu: recommendation.gpu,
+  });
+  return {
+    ...recommendation,
+    changes: describeChanges(recommendation.current, settings),
+    settings,
+    reloadRequired: engine.status().loaded,
+  };
+});
+
+/** Unloads the model and releases llama.cpp itself, which is what hands the RAM back. */
+ipcMain.handle("system:free-memory", async () => {
+  await engine.disposeAll();
+  return { status: engine.status(), memory: liveMemory() };
 });
 
 ipcMain.handle("system:open-models-folder", async () => {

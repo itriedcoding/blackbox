@@ -199,6 +199,27 @@ personal access token produces the same kind of detached signature. It is not
 Authenticode either, and it replaces the workflow identity with a long-lived
 token, which is why this repository signs through OIDC in CI instead.
 
+## Performance
+
+The rail's **Performance** page is where RAM is managed, using numbers read from the
+machine instead of a fixed guess:
+
+- **Memory right now** — used and free system RAM, the budget a model may use, and
+the footprint of Blackbox's own processes, refreshed every two seconds while the
+page is open.
+- **Recommended for this machine** — reads the chosen model's GGUF metadata
+(`kvBytesPerToken`, trained context length) and picks the largest context window
+that fits inside 80% of the budget, one thread per core minus one (capped at 8), and
+GPU-when-available only when llama.cpp actually found a GPU. The reason line shows
+the arithmetic: weights + KV against the budget.
+- **Optimize now** — writes those three settings at once and offers to reload a
+loaded model so they take effect immediately.
+- **Free RAM now** — unloads the model and disposes llama.cpp itself, which is what
+really hands the memory back; the next message loads the model again.
+
+`npm run verify:perf` covers the arithmetic headlessly: thread sizing, context
+fitting, the model's own context ceiling, the does-not-fit case, and the change list.
+
 ## Verify the engine
 
 ```bash

@@ -1,7 +1,7 @@
 {
   "name": "blackbox",
   "productName": "Blackbox",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Run uncensored, abliterated AI models locally on your CPU. No cloud, no GPU, no guardrails.",
   "license": "MIT",
   "private": true,
@@ -30,6 +30,7 @@
     "verify:site": "node scripts/verify-site.mjs",
     "verify:ide": "node scripts/smoke-ide.mjs",
     "verify:modes": "node scripts/verify-modes.mjs",
+    "verify:perf": "node scripts/verify-perf.mjs",
     "verify:hf": "node scripts/verify-hf.mjs",
     "verify:signature": "node scripts/verify-signature.mjs",
     "verify:updates": "node scripts/verify-updates.mjs"
@@ -45,7 +46,7 @@
   "build": {
     "appId": "app.blackbox.local",
     "productName": "Blackbox",
-    "copyright": "Copyright © 2026 Blackbox",
+    "copyright": "Copyright \u00a9 2026 Blackbox",
     "directories": {
       "output": "dist",
       "buildResources": "build"
