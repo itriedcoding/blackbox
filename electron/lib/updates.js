@@ -149,9 +149,25 @@ export async function sha256File(file) {
   return hash.digest("hex");
 }
 
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 700;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function sizeOnDisk(file) {
+  try {
+    return (await fs.promises.stat(file)).size;
+  } catch {
+    return 0;
+  }
+}
+
 /**
- * Streams the installer to disk, hashing as it goes, then refuses the file
- * unless the size and SHA-256 match the manifest. A rejected file is deleted.
+ * Streams the installer to a `.part` file, hashing as it goes, and resumes from
+ * whatever already arrived when a connection drops instead of starting the
+ * whole download over. The file only moves into place once the size and SHA-256
+ * match the manifest; anything else is deleted, so a half transfer can never be
+ * run.
  */
 export async function downloadUpdate({
   manifest,
@@ -161,58 +177,116 @@ export async function downloadUpdate({
   onProgress = () => {},
   signal,
   fetchImpl = fetch,
+  attempts = MAX_ATTEMPTS,
 } = {}) {
   const verified = normalizeManifest(manifest);
   // A URL may be supplied by the caller (mirrors, tests); otherwise it is built
   // from the manifest's version and asset name. A URL inside the manifest is
   // never trusted, because normalizeManifest drops everything it does not check.
   const target = url ?? installerUrl(verified, repo);
-
-  const response = await fetchImpl(target, {
-    redirect: "follow",
-    headers: { "User-Agent": "Blackbox-updater" },
-    signal,
-  });
-  if (!response.ok) throw new Error(`The installer download failed with HTTP ${response.status}.`);
-  if (!response.body) throw new Error("The installer download returned no body.");
+  const part = `${destination}.part`;
+  const cancelled = () => new Error("The download was cancelled.");
 
   await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  await fs.promises.rm(part, { force: true });
 
-  const total = Number(response.headers.get("content-length")) || verified.size;
-  const hash = createHash("sha256");
-  let received = 0;
+  let lastError = null;
 
-  const meter = new Transform({
-    transform(chunk, _encoding, callback) {
-      received += chunk.length;
-      hash.update(chunk);
-      onProgress({
-        received,
-        total,
-        percent: total > 0 ? Math.min(100, (received / total) * 100) : null,
-      });
-      callback(null, chunk);
-    },
-  });
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (signal?.aborted) throw cancelled();
 
-  try {
-    await pipeline(Readable.fromWeb(response.body), meter, fs.createWriteStream(destination));
-  } catch (error) {
+    let resumeFrom = await sizeOnDisk(part);
+    if (resumeFrom >= verified.size) {
+      // Something the full size is already sitting there; never trust it.
+      await fs.promises.rm(part, { force: true });
+      resumeFrom = 0;
+    }
+
+    const headers = { "User-Agent": "Blackbox-updater" };
+    if (resumeFrom > 0) headers.Range = `bytes=${resumeFrom}-`;
+
+    let response;
+    try {
+      response = await fetchImpl(target, { redirect: "follow", headers, signal });
+    } catch (error) {
+      if (signal?.aborted) throw cancelled();
+      lastError = error;
+      if (attempt === attempts) break;
+      await sleep(RETRY_DELAY_MS * attempt);
+      continue;
+    }
+
+    if (!response.ok) {
+      // 416 means the partial file does not line up with this asset; drop it and
+      // let the next attempt start from zero.
+      if (response.status === 416 && resumeFrom > 0) {
+        await fs.promises.rm(part, { force: true });
+        lastError = new Error("The server rejected the resume offset.");
+        if (attempt === attempts) break;
+        continue;
+      }
+      throw new Error(`The installer download failed with HTTP ${response.status}.`);
+    }
+    if (!response.body) throw new Error("The installer download returned no body.");
+
+    // A server that ignores the range sends the whole file; appending it to the
+    // bytes already on disk would corrupt the result, so start over instead.
+    const resumed = response.status === 206 && resumeFrom > 0;
+    if (resumeFrom > 0 && !resumed) {
+      await fs.promises.rm(part, { force: true });
+      resumeFrom = 0;
+    }
+
+    const hash = createHash("sha256");
+    if (resumed) {
+      for await (const chunk of fs.createReadStream(part)) hash.update(chunk);
+    }
+
+    let received = resumeFrom;
+    const meter = new Transform({
+      transform(chunk, _encoding, callback) {
+        received += chunk.length;
+        hash.update(chunk);
+        onProgress({
+          received,
+          total: verified.size,
+          percent: verified.size > 0 ? Math.min(100, (received / verified.size) * 100) : null,
+        });
+        callback(null, chunk);
+      },
+    });
+
+    try {
+      await pipeline(Readable.fromWeb(response.body), meter, fs.createWriteStream(part, { flags: "a" }));
+    } catch (error) {
+      if (signal?.aborted) {
+        await fs.promises.rm(part, { force: true });
+        throw cancelled();
+      }
+      lastError = error;
+      if (attempt === attempts) break;
+      // Keep the partial file so the next attempt only asks for the remainder.
+      await sleep(RETRY_DELAY_MS * attempt);
+      continue;
+    }
+
+    const digest = hash.digest("hex");
+    if (received !== verified.size) {
+      await fs.promises.rm(part, { force: true });
+      throw new Error(`The download is ${received} bytes but the release says ${verified.size}. Try again.`);
+    }
+    if (digest !== verified.sha256) {
+      await fs.promises.rm(part, { force: true });
+      throw new Error("The installer did not match the published SHA-256, so it was deleted. Try again, or download it from the release page.");
+    }
+
+    // Windows refuses to rename onto an existing file, so clear the target first.
     await fs.promises.rm(destination, { force: true });
-    if (signal?.aborted) throw new Error("The download was cancelled.");
-    throw new Error(`The download failed: ${error.message}`);
+    await fs.promises.rename(part, destination);
+    onProgress({ received, total: verified.size, percent: 100 });
+    return { path: destination, bytes: received, sha256: digest };
   }
 
-  const digest = hash.digest("hex");
-  if (received !== verified.size) {
-    await fs.promises.rm(destination, { force: true });
-    throw new Error(`The download is ${received} bytes but the release says ${verified.size}. Try again.`);
-  }
-  if (digest !== verified.sha256) {
-    await fs.promises.rm(destination, { force: true });
-    throw new Error("The installer did not match the published SHA-256, so it was deleted. Try again, or download it from the release page.");
-  }
-
-  onProgress({ received, total: verified.size, percent: 100 });
-  return { path: destination, bytes: received, sha256: digest };
+  await fs.promises.rm(part, { force: true });
+  throw new Error(`The download failed after ${attempts} attempts: ${lastError?.message ?? "unknown error"}`);
 }

@@ -64,6 +64,9 @@ version, asset name, exact byte size and SHA-256 of that build.
 is treated as "no update", not as an error.
 - **Update to X** downloads the installer with live progress; while it downloads
 the button becomes a cancel button.
+- If the connection drops, the bytes already on disk are kept and the retry asks
+for the remainder with an HTTP range request, so a flaky link does not start the
+whole file over. Three attempts, then an error that says so.
 - The download is hashed as it streams and must match **both** the manifest's size
 and SHA-256. A mismatch deletes the file and refuses to run it.
 - **Restart and update** closes the app, then a detached PowerShell waits for the
@@ -79,8 +82,18 @@ the manifest is served from the same place as the binary. Nothing installs witho
 the button being pressed.
 
 ```bash
-npm run verify:updates   # version ordering, manifest validation, verified download, tamper rejection
+npm run verify:updates   # version ordering, manifest validation, verified download, resume, tamper rejection
 ```
+
+### Download size
+
+The package ships Electron, the CPU llama.cpp runtime and the Vulkan runtime. It
+deliberately does **not** ship the CUDA runtimes: `@node-llama-cpp/win-x64-cuda`
+(183 MB unpacked) and `win-x64-cuda-ext` (388 MB) are excluded from the build,
+because this is a CPU-first app and carrying them tripled the installer — large
+enough that downloads were slow and often arrived truncated, which Windows reports
+as "Installer integrity check has failed". Vulkan-capable GPUs still accelerate;
+CUDA-only cards simply run on the CPU.
 
 ## Build the Windows installer
 

@@ -48,7 +48,16 @@ const installer = Buffer.from("MZ fake installer payload for the update test");
 const installerSha = createHash("sha256").update(installer).digest("hex");
 const manifest = { version: "9.9.9", asset: "Blackbox-9.9.9-win-x64.exe", size: installer.length, sha256: installerSha };
 
-const serverState = { manifest: { ...manifest }, body: installer, manifestBom: true, downloadStatus: 200 };
+const serverState = {
+  manifest: { ...manifest },
+  body: installer,
+  manifestBom: true,
+  downloadStatus: 200,
+  // When set, the first installer request is cut off half way through so the
+  // client has to resume rather than start again.
+  dropFirstTransfer: false,
+  rangeRequests: [],
+};
 
 const server = http.createServer((req, res) => {
   if (req.url.startsWith("/latest.json")) {
@@ -63,8 +72,32 @@ const server = http.createServer((req, res) => {
       res.end("nope");
       return;
     }
-    res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": String(serverState.body.length) });
-    res.end(serverState.body);
+    const range = req.headers.range;
+    if (range) serverState.rangeRequests.push(range);
+    const body = serverState.body;
+    const match = range ? /^bytes=(\d+)-/.exec(range) : null;
+    const start = match ? Number(match[1]) : 0;
+    if (start >= body.length) {
+      res.writeHead(416, { "Content-Range": `bytes */${body.length}` });
+      res.end();
+      return;
+    }
+    const slice = body.subarray(start);
+    const headers = {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": String(slice.length),
+      "Accept-Ranges": "bytes",
+    };
+    if (match) headers["Content-Range"] = `bytes ${start}-${body.length - 1}/${body.length}`;
+    res.writeHead(match ? 206 : 200, headers);
+    if (serverState.dropFirstTransfer) {
+      // Deliver half, then kill the socket the way a dropped Wi-Fi link does.
+      serverState.dropFirstTransfer = false;
+      res.write(slice.subarray(0, Math.max(1, Math.floor(slice.length / 2))));
+      setTimeout(() => res.destroy(), 10);
+      return;
+    }
+    res.end(slice);
     return;
   }
   res.writeHead(404);
@@ -167,6 +200,39 @@ try {
     assertEqual(fs.readFileSync(destination).toString(), installer.toString(), "bytes on disk");
     assert(progress.length > 0, "progress was not reported");
     assert(progress.at(-1).percent === 100, "final progress should be 100");
+  });
+
+  await check("a dropped transfer resumes from the partial file", async () => {
+    const destination = path.join(tmpDir, "resumed.exe");
+    serverState.rangeRequests = [];
+    serverState.dropFirstTransfer = true;
+    const result = await downloadUpdate({
+      manifest,
+      destination,
+      url: `${base}/installer.exe`,
+    });
+    assertEqual(result.sha256, installerSha, "digest after resume");
+    assertEqual(fs.readFileSync(destination).toString(), installer.toString(), "bytes after resume");
+    assert(serverState.rangeRequests.length > 0, "the retry must ask for the remaining bytes with a Range header");
+    assert(/^bytes=\d+-$/.test(serverState.rangeRequests[0]), `unexpected range: ${serverState.rangeRequests[0]}`);
+    assert(!fs.existsSync(`${destination}.part`), "the partial file must be gone once the download completes");
+  });
+
+  await check("a server that ignores Range still produces the right file", async () => {
+    const destination = path.join(tmpDir, "ignored-range.exe");
+    fs.writeFileSync(`${destination}.part`, installer.subarray(0, 10));
+    const result = await downloadUpdate({
+      manifest,
+      destination,
+      url: `${base}/installer.exe?no-range=1`,
+      fetchImpl: (target, options) => {
+        const headers = { ...(options.headers ?? {}) };
+        delete headers.Range;
+        return fetch(target, { ...options, headers });
+      },
+    });
+    assertEqual(result.sha256, installerSha, "digest");
+    assertEqual(fs.readFileSync(destination).toString(), installer.toString(), "no duplicated prefix");
   });
 
   await check("a wrong hash is deleted, never returned", async () => {

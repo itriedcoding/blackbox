@@ -1,7 +1,7 @@
 {
   "name": "blackbox",
   "productName": "Blackbox",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Run uncensored, abliterated AI models locally on your CPU. No cloud, no GPU, no guardrails.",
   "license": "MIT",
   "private": true,
@@ -59,7 +59,12 @@
       "!**/node_modules/@node-llama-cpp/{linux,darwin}-*/**",
       "!**/node_modules/@node-llama-cpp/win-arm64/**",
       "!**/*.ts",
-      "!**/.cache/**"
+      "!**/.cache/**",
+      "!**/node_modules/@node-llama-cpp/win-x64-cuda/**",
+      "!**/node_modules/@node-llama-cpp/win-x64-cuda-ext/**",
+      "!**/node_modules/@node-llama-cpp/*-cuda/**",
+      "!**/__pycache__/**",
+      "!**/*.pdb"
     ],
     "asar": true,
     "asarUnpack": [
