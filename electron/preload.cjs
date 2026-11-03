@@ -96,7 +96,12 @@ contextBridge.exposeInMainWorld("blackbox", {
     generate: (request) => ipcRenderer.invoke("ide:generate", request),
     apply: (request) => ipcRenderer.invoke("ide:apply", request),
     discard: () => ipcRenderer.invoke("ide:discard"),
+    build: (request) => ipcRenderer.invoke("ide:build", request),
+    buildStop: () => ipcRenderer.invoke("ide:build-stop"),
     onGenerateDelta: subscribe("codegen:delta"),
+    onBuildDelta: subscribe("build:delta"),
+    onBuildProgress: subscribe("build:progress"),
+    onBuildRound: subscribe("build:round"),
   },
   terminal: {
     start: (request) => ipcRenderer.invoke("term:start", request),

@@ -108,7 +108,7 @@ electron/
   lib/engine.js      llama.cpp load / stream / stop / unload
   lib/quant.js       quant ranking + RAM budgeting
   lib/store.js       settings and chat persistence
-  lib/ide/           path sandbox, tree, file I/O, languages, prompt parser, shell
+  lib/ide/           path sandbox, tree, file I/O, languages, prompt parser, build loop, shell
   lib/ide-ipc.js     code workspace IPC (folders, files, shell, generation)
 renderer/            monochrome glass UI (no framework, no bundler)
   ide.js / ide.css   code view: explorer, CodeMirror editor, xterm shell
@@ -132,12 +132,13 @@ account, no cloud IDE, no snippets sent anywhere.
   `target`, `__pycache__` and friends are skipped; a huge tree reports itself as
   partial instead of hanging the window.
 - **Editor.** CodeMirror 5 (vendored, MIT) with line numbers, bracket matching,
-  auto-closing, active-line highlight and a monochrome theme. Syntax modes ship
-  for JavaScript/TypeScript/JSX, HTML/Vue/Svelte, CSS/SCSS/Less, Python, JSON,
-  Markdown, C/C++/C#, Java, Kotlin, Scala, Objective-C, Rust, Go, SQL, YAML,
-  shell, PowerShell, PHP, Ruby, Swift, Dart, Lua, R, Haskell, CMake, TOML,
-  Dockerfile, Perl, Julia, Erlang, Clojure, CoffeeScript, VB, diff and Nginx
-  config. Anything else opens as plain text — the model can still write it.
+  auto-closing, active-line highlight and a monochrome theme. **All 156 languages
+  CodeMirror ships a mode package for are wired in** — every mode file is
+  vendored and the table is generated from what those packages actually register,
+  not from a hand-written list. `npm run verify:modes` loads all 121 packages in
+  a sandbox and fails if any advertised extension resolves to a MIME no mode
+  defined. A file with no mode still opens as plain text and is still editable,
+  and the model can write any language because files are just text.
 - **Save with conflict detection.** A file that changed on disk since you opened
   it is reported, and overwriting is your explicit choice, not a silent loss.
 - **Terminal.** xterm.js rendering a real shell (`cmd.exe` on Windows, `$SHELL`
@@ -146,10 +147,15 @@ account, no cloud IDE, no snippets sent anywhere.
   full-screen TUI programs that require a terminal device will complain. The
   child environment is the user's own with credential-shaped variables
   (`*TOKEN*`, `*SECRET*`, `*KEY*`, `*PASSWORD*`) removed.
-- **Build with the model.** Describe a project or a change. The model is asked
-  for `===FILE: path===` blocks; the reply is parsed into a plan you review,
-  and only checked files are written. Absolute paths and `..` are rejected
-  before anything touches the disk; a plan is capped at 40 files and 2 MB.
+- **Build with the model, until it is done.** *Build until done* runs rounds:
+  each round the model receives the files already written and is asked for what
+  is still missing. It stops when the model replies `===DONE===`, when a round
+  produces no file that differs from disk, or at the round/byte budget — then it
+  reports what it wrote. *Plan only* does a single reply you review before any
+  file is written. Absolute paths and `..` are rejected before anything touches
+  the disk; a plan is capped at 40 files and 2 MB, a build at 8 rounds and 6 MB.
+- **Your folder, however you get to it.** Native folder picker, a typed absolute
+  path (including network drives), or the recent list kept in settings.
 
 Honest limits: a 1–3B abliterated model writes small, simple projects well and
 large frameworks poorly. Generation is bounded by the context window, so a repo
@@ -158,7 +164,8 @@ files up to 2 MB and does not embed a language server, so completion is the
 editor's bracket/indent behaviour rather than symbol-aware autocomplete.
 
 ```bash
-npm run verify:ide   # path sandbox, file I/O, parser, folder walk, live shell
+npm run verify:ide     # path sandbox, file I/O, parser, build loop, live shell
+npm run verify:modes   # 156 languages: load every mode, check every extension
 ```
 
 ## Publish a website

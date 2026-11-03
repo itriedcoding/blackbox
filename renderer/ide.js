@@ -73,6 +73,8 @@
       '<span class="ide__path mono" id="ide-path">No folder open</span>' +
       "</div>" +
       '<div class="ide__actions">' +
+      '<button class="btn btn--sm btn--ghost" data-ide="open-path" title="Type an absolute folder path">Path…</button>' +
+      '<button class="btn btn--sm btn--ghost" data-ide="recent" title="Folders opened before">Recent</button>' +
       '<button class="btn btn--sm btn--ghost" data-ide="new-file">New file</button>' +
       '<button class="btn btn--sm btn--ghost" data-ide="new-folder">New folder</button>' +
       '<button class="btn btn--sm btn--ghost" data-ide="save" id="ide-save">Save</button>' +
@@ -95,11 +97,13 @@
       '<div class="ide__gen-row">' +
       '<textarea id="ide-instruction" rows="2" spellcheck="false" placeholder="Describe a project or a change. The model writes complete files into the open folder."></textarea>' +
       '<div class="ide__gen-buttons">' +
-      '<button class="btn btn--sm btn--primary" data-ide="generate" id="ide-generate">Generate</button>' +
+      '<button class="btn btn--sm btn--primary" data-ide="build" id="ide-build" title="Keep generating rounds until the project is complete">Build until done</button>' +
+      '<button class="btn btn--sm btn--ghost" data-ide="generate" id="ide-generate" title="One reply, reviewed before writing">Plan only</button>' +
       '<button class="btn btn--sm btn--ghost" data-ide="stop">Stop</button>' +
       "</div>" +
       "</div>" +
       '<pre class="ide__stream mono" id="ide-stream"></pre>' +
+      '<div class="ide__build mono" id="ide-build-log"></div>' +
       '<div class="ide__plan" id="ide-plan"></div>' +
       "</div>" +
       "</section>" +
@@ -119,6 +123,7 @@
     el.instruction = elById("ide-instruction");
     el.stream = elById("ide-stream");
     el.plan = elById("ide-plan");
+    el.buildLog = elById("ide-build-log");
     el.path = elById("ide-path");
     el.count = elById("ide-count");
     el.termBody = elById("ide-term");
@@ -178,6 +183,31 @@
       });
     }
 
+    if (api.ide.onBuildProgress) {
+      api.ide.onBuildProgress(function (payload) {
+        if (!payload || payload.done) return;
+        setStatus("Round " + payload.round + " · " + payload.files.length + " file(s) · " + fmtBytes(payload.totalBytes));
+      });
+    }
+
+    if (api.ide.onBuildRound) {
+      api.ide.onBuildRound(function (payload) {
+        if (!payload) return;
+        if (payload.done) return appendBuild("Round " + payload.round + ": model signalled completion");
+        if (!payload.files.length) return appendBuild("Round " + payload.round + ": no new files");
+        appendBuild("Round " + payload.round + ": " + payload.files.join(", "));
+      });
+    }
+
+    if (api.ide.onBuildDelta) {
+      api.ide.onBuildDelta(function (payload) {
+        if (!payload || !el.stream) return;
+        state.stream += payload.text;
+        el.stream.textContent = state.stream.length > 6000 ? state.stream.slice(-6000) : state.stream;
+        el.stream.scrollTop = el.stream.scrollHeight;
+      });
+    }
+
     if (api.terminal.onData) {
       api.terminal.onData(function (payload) {
         if (!term || !state.termId || payload.id !== state.termId) return;
@@ -205,6 +235,9 @@
       case "save": return saveActive();
       case "close-tab": return closeActive();
       case "generate": return generate();
+      case "build": return buildProject();
+      case "open-path": return openPathDialog();
+      case "recent": return recentFolders();
       case "stop": return stopGenerate();
       case "apply-plan": return applyPlan();
       case "discard-plan": return discardPlan();
@@ -596,6 +629,93 @@
     setStatus("Plan discarded.");
   }
 
+  async function buildProject() {
+    if (!state.root) return setStatus("Open a folder first.");
+    var instruction = (el.instruction && el.instruction.value || "").trim();
+    if (!instruction) return setStatus("Describe the project first.");
+    if (!state.modelLoaded) return setStatus("Load a model first (Models). This runs on the local model.");
+    if (state.building) return setStatus("A build is already running.");
+
+    state.building = true;
+    state.stream = "";
+    if (el.stream) el.stream.textContent = "";
+    if (el.plan) el.plan.innerHTML = "";
+    if (el.buildLog) el.buildLog.innerHTML = "";
+    var buildButton = elById("ide-build");
+    if (buildButton) buildButton.disabled = true;
+    setStatus("Building…");
+    appendBuild("Building: " + instruction);
+
+    try {
+      var result = await api.ide.build({ instruction: instruction });
+      appendBuild("Finished: " + result.reason + " · " + (result.files ? result.files.length : 0) + " file(s) · " + fmtBytes(result.totalBytes || 0));
+      if (result.failures && result.failures.length) {
+        appendBuild("Failed: " + result.failures.map(function (failure) { return failure.path + " — " + failure.message; }).join("; "));
+      }
+      await refreshTree();
+      setStatus(result.reason === "done" ? "Project complete" : "Stopped: " + result.reason);
+    } catch (error) {
+      appendBuild("Error: " + error.message);
+      setStatus(error.message);
+    } finally {
+      state.building = false;
+      if (buildButton) buildButton.disabled = false;
+    }
+  }
+
+  function appendBuild(line) {
+    if (!el.buildLog) return;
+    var row = document.createElement("div");
+    row.className = "ide__build-row";
+    row.textContent = line;
+    el.buildLog.appendChild(row);
+    el.buildLog.scrollTop = el.buildLog.scrollHeight;
+  }
+
+  async function adoptFolder(path) {
+    var opened = await api.ide.openFolder(path);
+    if (!opened) return false;
+    state.root = opened.root;
+    state.tabs = [];
+    state.active = null;
+    state.openDirs = {};
+    state.plan = null;
+    if (editor) {
+      state.silent = true;
+      editor.setValue("");
+      state.silent = false;
+    }
+    renderTabs();
+    setEditorMessage("Open a file from the tree.");
+    await refreshTree();
+    await restartShell();
+    setStatus("Opened " + opened.root);
+    return true;
+  }
+
+  async function openPathDialog() {
+    var value = await askBox("Absolute folder path", "D:/projects/demo");
+    if (!value) return;
+    try {
+      await adoptFolder(value);
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function recentFolders() {
+    try {
+      var info = await api.ide.state();
+      var recent = info.recent || [];
+      if (!recent.length) return setStatus("No folders opened yet.");
+      var picked = await listBox("Open a recent folder", recent);
+      if (!picked) return;
+      await adoptFolder(picked);
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
   // ---------------------------------------------------------------- terminal
 
   function mountTerminal() {
@@ -715,6 +835,31 @@
     var promise = dialogBox(title, "", "Create");
     return promise.then(function (value) {
       return value;
+    });
+  }
+
+  function listBox(title, options) {
+    return new Promise(function (resolve) {
+      var overlay = document.createElement("div");
+      overlay.className = "ide-modal";
+      var rows = options
+        .map(function (option) {
+          return '<button class="ide__recent mono" data-value="' + esc(option) + '" title="' + esc(option) + '">' + esc(option) + "</button>";
+        })
+        .join("");
+      overlay.innerHTML =
+        '<div class="ide-modal__box glass">' +
+        '<div class="ide-modal__title">' + esc(title) + "</div>" +
+        '<div class="ide__recent-list">' + rows + "</div>" +
+        '<div class="ide-modal__row"><button class="btn btn--sm btn--ghost" data-choice="cancel">Cancel</button></div>' +
+        "</div>";
+      document.body.appendChild(overlay);
+      overlay.addEventListener("click", function (event) {
+        var value = event.target.getAttribute("data-value");
+        var cancel = event.target.getAttribute("data-choice") === "cancel" || event.target === overlay;
+        overlay.remove();
+        resolve(cancel || value === null ? null : value);
+      });
     });
   }
 

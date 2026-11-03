@@ -16,6 +16,7 @@ import { flattenFiles, listTree } from "./ide/tree.js";
 import { ConflictError, createEntry, deleteEntry, readTextFile, renameEntry, statEntry, writeTextFile } from "./ide/files.js";
 import { languageCount, languageFor } from "./ide/languages.js";
 import { buildProjectPrompt, commentary, parseFileBlocks } from "./ide/prompt.js";
+import { DEFAULT_MAX_ROUNDS, runBuild } from "./ide/build.js";
 import { assertDirectory, resolveInside } from "./ide/safety.js";
 import { ShellManager } from "./ide/shell.js";
 
@@ -272,6 +273,61 @@ export async function registerIde({ send, getWindow }) {
   ipcMain.handle("ide:discard", () => {
     plan = null;
     return true;
+  });
+
+  let building = null;
+
+  ipcMain.handle("ide:build", async (event, request = {}) => {
+    if (building) throw new Error("A build is already running. Stop it first.");
+    const root = requireRoot();
+    const instruction = String(request.instruction ?? "").trim();
+    if (!instruction) throw new Error("Describe what to build first.");
+
+    const settings = store.readSettings();
+    const listing = await listTree(root);
+    const id = `build-${Date.now()}`;
+    const controller = { stop: false };
+    building = controller;
+
+    try {
+      const result = await runBuild({
+        instruction,
+        tree: listing.tree,
+        maxRounds: Math.max(1, Math.min(16, Number(request.maxRounds ?? DEFAULT_MAX_ROUNDS))),
+        shouldStop: () => controller.stop,
+        provider: async ({ systemPrompt, prompt, round }) => {
+          const response = await engine.chat({
+            chatId: `${id}-round-${round}`,
+            systemPrompt,
+            prompt,
+            temperature: Number(settings.codeTemperature ?? 0.25),
+            topP: 0.95,
+            topK: 40,
+            maxTokens: Math.max(256, Math.min(4096, Number(request.maxTokens ?? settings.codeMaxTokens ?? 1200))),
+            onDelta: (chunk) => {
+              if (!event.sender.isDestroyed()) event.sender.send("build:delta", { id, round, text: chunk });
+            },
+          });
+          return response.text;
+        },
+        writeFile: (relativePath, content) => writeTextFile(root, relativePath, content, {}),
+        onProgress: (payload) => {
+          if (!event.sender.isDestroyed()) event.sender.send("build:progress", { id, ...payload });
+        },
+        onRound: (payload) => {
+          if (!event.sender.isDestroyed()) event.sender.send("build:round", { id, ...payload });
+        },
+      });
+
+      return { id, root, ...result };
+    } finally {
+      building = null;
+    }
+  });
+
+  ipcMain.handle("ide:build-stop", () => {
+    if (building) building.stop = true;
+    return engine.stop();
   });
 
   ipcMain.handle("ide:read-many", async (_event, request = {}) => {

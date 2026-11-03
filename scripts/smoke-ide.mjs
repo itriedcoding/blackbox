@@ -15,7 +15,8 @@ import { strict as assert } from "node:assert";
 import { cleanRelativePath, resolveInside } from "../electron/lib/ide/safety.js";
 import { listTree, flattenFiles } from "../electron/lib/ide/tree.js";
 import { readTextFile, writeTextFile, createEntry, renameEntry, deleteEntry } from "../electron/lib/ide/files.js";
-import { languageFor, languageCount } from "../electron/lib/ide/languages.js";
+import { languageFor, languageCount, LANGUAGE_TABLE } from "../electron/lib/ide/languages.js";
+import { completionSignal, roundPrompt, runBuild } from "../electron/lib/ide/build.js";
 import { buildProjectPrompt, commentary, parseFileBlocks } from "../electron/lib/ide/prompt.js";
 import { ShellManager } from "../electron/lib/ide/shell.js";
 
@@ -150,21 +151,93 @@ await check("commentary strips file bodies", () => {
   assert.ok(!/const a = 1/.test(text), `block body leaked into commentary: ${text}`);
 });
 
-await check("language table maps real extensions", () => {
-  const cases = {
-    "app.ts": "TypeScript",
-    "main.rs": "Rust",
-    "server.go": "Go",
-    "index.html": "HTML",
-    "style.scss": "SCSS",
-    "query.sql": "SQL",
-    "Dockerfile": "Dockerfile",
-    "notes.unknown-ext": "Plain text",
-  };
-  for (const [file, label] of Object.entries(cases)) {
-    assert.equal(languageFor(file).label, label, `${file} → ${languageFor(file).label}, wanted ${label}`);
+await check("language table covers every extension it advertises", () => {
+  assert.ok(LANGUAGE_TABLE.length >= 150, `only ${LANGUAGE_TABLE.length} languages in the table`);
+  let checked = 0;
+  const plain = [];
+  for (const entry of LANGUAGE_TABLE) {
+    for (const ext of entry.ext ?? []) {
+      const language = languageFor(`sample.${ext}`);
+      checked += 1;
+      if (!language.mode) plain.push(`.${ext} (${entry.name})`);
+    }
   }
-  assert.ok(languageCount() >= 30, `only ${languageCount()} languages mapped`);
+  assert.deepEqual(plain, [], `extensions with no highlighting: ${plain.slice(0, 10).join(", ")}`);
+  assert.ok(checked > 200, `only ${checked} extensions checked`);
+  assert.equal(languageFor("Dockerfile").label, "Dockerfile");
+  assert.equal(languageFor("notes.unknown-ext").mode, null);
+  assert.ok(languageCount() >= 150);
+});
+
+await check("build loop keeps going until the model signals done", async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "blackbox-build-"));
+  const roundsSeen = [];
+  const replies = [
+    "===FILE: package.json===\n{}\n===END===\n===FILE: src/index.js===\nconsole.log(1)\n===END===",
+    "===FILE: src/index.js===\nconsole.log(1)\n===END===\n===FILE: README.md===\n# demo\n===END===",
+    "===DONE===",
+  ];
+  const result = await runBuild({
+    instruction: "a node demo",
+    tree: null,
+    provider: async ({ round }) => {
+      roundsSeen.push(round);
+      return replies[round - 1] ?? "===DONE===";
+    },
+    writeFile: async (relative, content) => {
+      const full = path.join(dir, relative);
+      await fsp.mkdir(path.dirname(full), { recursive: true });
+      await fsp.writeFile(full, content, "utf8");
+    },
+  });
+  assert.equal(result.reason, "done");
+  assert.equal(roundsSeen.length, 3, `expected 3 rounds, saw ${roundsSeen.length}`);
+  assert.equal(fs.readFileSync(path.join(dir, "README.md"), "utf8"), "# demo\n");
+  assert.equal(result.files.length, 3);
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+await check("build loop stops when a round changes nothing", async () => {
+  let calls = 0;
+  const result = await runBuild({
+    instruction: "x",
+    tree: null,
+    provider: async () => {
+      calls += 1;
+      return "===FILE: a.txt===\nsame\n===END===";
+    },
+    writeFile: async () => {},
+  });
+  assert.equal(result.reason, "converged");
+  assert.equal(calls, 2, `expected 2 rounds before converging, saw ${calls}`);
+  assert.equal(result.rounds.length, 1);
+});
+
+await check("build loop respects the stop flag", async () => {
+  let stop = false;
+  const result = await runBuild({
+    instruction: "x",
+    tree: null,
+    provider: async () => {
+      stop = true;
+      return "===FILE: a.txt===\none\n===END===";
+    },
+    writeFile: async () => {},
+    shouldStop: () => stop,
+  });
+  assert.equal(result.reason, "stopped");
+  assert.equal(result.stopped, true);
+});
+
+await check("completion marker and round prompts are real", () => {
+  assert.equal(completionSignal("===DONE==="), true);
+  assert.equal(completionSignal("work\n===DONE===\n"), true);
+  assert.equal(completionSignal("===FILE: a===\n===END==="), false);
+  const written = new Map([["src/app.js", "export const a = 1;\n"]]);
+  const { systemPrompt, prompt } = roundPrompt({ instruction: "add tests", tree: null, written, round: 2, maxRounds: 8 });
+  assert.match(systemPrompt, /===DONE===/);
+  assert.match(prompt, /src\/app\.js/);
+  assert.match(prompt, /Round 2 of at most 8/);
 });
 
 await check("shell streams real command output", async () => {
