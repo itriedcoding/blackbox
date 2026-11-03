@@ -114,6 +114,47 @@ accumulate; **EV** certificates and Azure Trusted Signing are trusted
 immediately. Reputation belongs to the certificate, not to a file hash, so it
 survives app updates that are signed with the same certificate.
 
+### Sigstore signature, and what it does not fix
+
+Every release also signs the installer with **Sigstore**, keyless, using the
+workflow's own GitHub OIDC identity — no certificate to buy and no secret to
+store. `cosign` writes `Blackbox-<version>-win-x64.exe.sigstore.json` beside the
+installer, records the signature in the Rekor transparency log, and the workflow
+**verifies the bundle before publishing**; a bundle that does not verify fails
+the release instead of shipping.
+
+Verify a download yourself:
+
+```bash
+npm run verify:signature -- Blackbox-1.6.0-win-x64.exe
+```
+
+or call `cosign` directly:
+
+```bash
+cosign verify-blob \
+  --bundle Blackbox-1.6.0-win-x64.exe.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/itriedcoding/locally-uncensored-ai/\.github/workflows/windows-release\.yml@.*$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  Blackbox-1.6.0-win-x64.exe
+```
+
+That proves the file was produced by this repository's release workflow and has
+not been altered since — genuinely useful when the download itself is unsigned.
+
+It does **not** clear SmartScreen, and no amount of Sigstore signing will.
+Sigstore signatures are detached, and its Fulcio root is not in the Microsoft
+Trusted Root Program, so Windows does not treat them as Authenticode: the blue
+"Windows protected your PC" panel behaves exactly as before. Only an Authenticode
+certificate from a CA in that program (Azure Trusted Signing, or an OV/EV
+code-signing certificate) removes it, and the workflow above already accepts one
+through `CSC_LINK`.
+
+A note on the shortcut people often suggest: `sigstore sign` with a GitHub
+personal access token produces the same kind of detached signature. It is not
+Authenticode either, and it replaces the workflow identity with a long-lived
+token, which is why this repository signs through OIDC in CI instead.
+
 ## Verify the engine
 
 ```bash

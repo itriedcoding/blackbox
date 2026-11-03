@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: write
+  # Keyless Sigstore signing: cosign exchanges this OIDC token for a short-lived
+  # Fulcio certificate, so there is no long-lived key or secret to leak.
+  id-token: write
 
 jobs:
   build:
@@ -50,6 +53,31 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
 
       # A build that was supposed to be signed must not ship silently unsigned.
+      - uses: sigstore/cosign-installer@v3
+
+      # This is a detached, transparency-logged signature over the exact bytes of
+      # the installer. It proves who built it and that it was not altered. It is
+      # NOT Authenticode, so it does not clear SmartScreen — see the README.
+      - name: Sign installer with Sigstore
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer was not produced." }
+          cosign sign-blob --yes --bundle "$($installer.FullName).sigstore.json" $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "cosign sign-blob failed with $LASTEXITCODE" }
+
+      # A bundle nobody verified is decoration: fail the release if it is wrong.
+      - name: Verify the Sigstore bundle
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
+          cosign verify-blob `
+            --bundle "$($installer.FullName).sigstore.json" `
+            --certificate-identity-regexp "^https://github.com/itriedcoding/locally-uncensored-ai/.github/workflows/windows-release.yml@.*$" `
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
+            $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Sigstore verification failed with $LASTEXITCODE" }
+
       - name: Verify installer signature
         shell: pwsh
         env:
@@ -96,7 +124,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: blackbox-windows-x64
-          path: dist/Blackbox-*-win-x64.exe
+          path: |
+            dist/Blackbox-*-win-x64.exe
+            dist/Blackbox-*-win-x64.exe.sigstore.json
           if-no-files-found: error
 
       - name: Publish release
@@ -107,9 +137,11 @@ jobs:
           $tag = "v${{ steps.version.outputs.version }}"
           $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
           if (-not $installer) { throw "Installer was not produced." }
+          $bundle = "$($installer.FullName).sigstore.json"
+          if (-not (Test-Path $bundle)) { throw "Sigstore bundle was not produced." }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag $installer.FullName --title "Blackbox $tag" --generate-notes --latest
+            gh release create $tag $installer.FullName $bundle --title "Blackbox $tag" --generate-notes --latest
           } else {
-            gh release upload $tag $installer.FullName --clobber
+            gh release upload $tag $installer.FullName $bundle --clobber
           }
