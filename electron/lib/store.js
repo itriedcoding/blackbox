@@ -52,6 +52,16 @@ const DEFAULT_SETTINGS = {
   recentWorkspaces: [],
   codeMaxTokens: 1200,
   codeTemperature: 0.25,
+  // discord bot + rich presence
+  discordToken: "",
+  discordChannelId: "",
+  discordPersona: "",
+  discordMaxTokens: 320,
+  discordCooldownMs: 4000,
+  discordStartWithApp: false,
+  discordPresenceOnLaunch: false,
+  discordAppId: "",
+  discordLogoUrl: "https://raw.githubusercontent.com/itriedcoding/locally-uncensored-ai/main/build/icon.png",
 };
 
 function ensureDir(dir) {

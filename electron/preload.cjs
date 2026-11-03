@@ -68,6 +68,17 @@ contextBridge.exposeInMainWorld("blackbox", {
     save: (chat) => ipcRenderer.invoke("chats:save", chat),
     remove: (id) => ipcRenderer.invoke("chats:delete", id),
   },
+  discord: {
+    status: () => ipcRenderer.invoke("discord:status"),
+    test: (token) => ipcRenderer.invoke("discord:test", token),
+    start: () => ipcRenderer.invoke("discord:start"),
+    stop: () => ipcRenderer.invoke("discord:stop"),
+    invite: () => ipcRenderer.invoke("discord:invite"),
+    presenceStart: (request) => ipcRenderer.invoke("discord:presence-start", request),
+    presenceStop: () => ipcRenderer.invoke("discord:presence-stop"),
+    activity: () => ipcRenderer.invoke("discord:activity"),
+    onEvent: subscribe("discord:event"),
+  },
   site: {
     export: (request) => ipcRenderer.invoke("site:export", request),
     openFolder: (dir) => ipcRenderer.invoke("site:open-folder", dir),

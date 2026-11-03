@@ -40,6 +40,7 @@
     diagnostics: null,
     perf: { memory: null, recommendation: null, error: null },
     perfTimer: null,
+    discord: { status: null, message: null },
     updates: { status: "idle", current: null, latest: null, manifest: null, percent: null, error: null }
   };
 
@@ -1171,6 +1172,46 @@
       (settings.hfToken ? "set" : "not set") +
       "</span></div>" +
       "</div>" +
+      // discord
+      '<div class="panel"><div class="panel__title">Discord</div><p class="panel__sub">A bot that answers with this model, plus Rich Presence showing what you are running.</p>' +
+      '<div class="field-row"><label class="field-row__label" for="set-discord-token">Bot token</label>' +
+      '<input type="password" id="set-discord-token" data-setting="discordToken" data-kind="string" placeholder="' +
+      (settings.discordToken ? "saved · paste a new token to replace it" : "MTIz… from Developer Portal → Bot") +
+      '" value="" spellcheck="false" autocomplete="off" />' +
+      '<div class="field-row__hint">Stored in this app\'s settings file and sent only to discord.com. Leave it empty to keep the saved token.</div></div>' +
+      '<div class="field-row"><label class="field-row__label" for="set-discord-channel">Answer in channel ID</label>' +
+      '<input class="field" id="set-discord-channel" data-setting="discordChannelId" data-kind="string" placeholder="optional · DMs and @mentions always work" value="' +
+      esc(settings.discordChannelId) +
+      '" spellcheck="false" /></div>' +
+      '<div class="field-row"><label class="field-row__label" for="set-discord-persona">Bot persona</label>' +
+      '<input class="field" id="set-discord-persona" data-setting="discordPersona" data-kind="string" placeholder="optional extra instruction for bot replies" value="' +
+      esc(settings.discordPersona) +
+      '" spellcheck="false" /></div>' +
+      '<div class="field-row"><label class="field-row__label" for="set-discord-appid">Application ID</label>' +
+      '<input class="field" id="set-discord-appid" data-setting="discordAppId" data-kind="string" placeholder="read from the token when empty" value="' +
+      esc(settings.discordAppId) +
+      '" spellcheck="false" /><div class="field-row__hint">Used for Rich Presence and the invite link.</div></div>' +
+      '<div class="field-row"><label class="field-row__label" for="set-discord-logo">Presence logo</label>' +
+      '<input class="field" id="set-discord-logo" data-setting="discordLogoUrl" data-kind="string" placeholder="https://…png or an uploaded asset key" value="' +
+      esc(settings.discordLogoUrl) +
+      '" spellcheck="false" /></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;margin:2px 0 4px"><img src="logo.png" alt="Blackbox logo" width="42" height="42" style="border-radius:10px;border:1px solid var(--line)" /><div class="field-row__hint" style="margin:0">This app\'s logo. Discord accepts an https image URL (PNG/JPEG/WebP) or an asset key you uploaded in the Developer Portal.</div></div>' +
+      '<label class="toggle"><input type="checkbox" id="set-discord-autostart" data-setting="discordStartWithApp" data-kind="boolean"' +
+      (settings.discordStartWithApp ? " checked" : "") +
+      ' /><span class="toggle__track"></span><span>Start the bot when Blackbox opens</span></label>' +
+      '<label class="toggle"><input type="checkbox" id="set-discord-presence-launch" data-setting="discordPresenceOnLaunch" data-kind="boolean"' +
+      (settings.discordPresenceOnLaunch ? " checked" : "") +
+      ' /><span class="toggle__track"></span><span>Show presence when Blackbox opens</span></label>' +
+      '<div id="discord-status">' +
+      discordStatusHtml() +
+      "</div>" +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn--sm btn--primary" data-action="discord-start">Start bot</button>' +
+      '<button class="btn btn--sm btn--ghost" data-action="discord-stop">Stop</button>' +
+      '<button class="btn btn--sm btn--ghost" data-action="discord-test">Test token</button>' +
+      '<button class="btn btn--sm btn--ghost" data-action="discord-invite">Invite link</button>' +
+      '<button class="btn btn--sm btn--ghost" data-action="discord-presence">Turn presence on</button></div>' +
+      '<div class="field-row__hint">Presence needs the Discord desktop app running. DMs and @mentions are answered with the model loaded in Blackbox; nothing is sent to a hosted model.</div>' +
+      "</div>" +
       // storage
       '<div class="panel"><div class="panel__title">Storage</div><p class="panel__sub">Models and conversations never leave this folder.</p>' +
       '<div class="field-row"><div class="field-row__label"><span>Model folder</span></div><div class="mono" style="word-break:break-all;color:var(--ink-soft)">' +
@@ -1190,6 +1231,8 @@
       "</div></div>";
 
     bindSettingControls("view-settings");
+    bindDiscordEvents();
+    refreshDiscord();
     refreshDiagnostics();
   }
 
@@ -1211,7 +1254,9 @@
       var key = target.getAttribute("data-setting");
       if (!key) return;
       var kind = target.getAttribute("data-kind");
-      var value = kind === "number" ? Number(target.value) : target.value;
+      // An empty token field means "keep the saved token", never "erase it".
+      if (key === "discordToken" && !String(target.value || "").trim()) return;
+      var value = kind === "number" ? Number(target.value) : kind === "boolean" ? Boolean(target.checked) : target.value;
       state.settings[key] = value;
 
       if (target.type === "range") {
@@ -1226,8 +1271,9 @@
       var target = event.target;
       var key = target.getAttribute("data-setting");
       if (!key) return;
+      if (key === "discordToken" && !String(target.value || "").trim()) return;
       var kind = target.getAttribute("data-kind");
-      var value = kind === "number" ? Number(target.value) : target.value;
+      var value = kind === "number" ? Number(target.value) : kind === "boolean" ? Boolean(target.checked) : target.value;
       state.settings[key] = value;
       if (key === "hfToken") state.catalog = null;
       scheduleSettingsSave(key);
@@ -1405,6 +1451,69 @@
 
     bindSettingControls("view-performance");
     refreshPerformance();
+  }
+
+  // --------------------------------------------------------------- discord
+
+  var discordBound = false;
+
+  function bindDiscordEvents() {
+    if (discordBound || !api || !api.discord) return;
+    discordBound = true;
+    api.discord.onEvent(function () {
+      refreshDiscord();
+    });
+  }
+
+  async function refreshDiscord() {
+    if (!api || !api.discord) return;
+    try {
+      state.discord.status = await api.discord.status();
+    } catch (error) {
+      state.discord.message = error.message;
+    }
+    paintDiscord();
+  }
+
+  function discordStatusHtml() {
+    var d = state.discord.status;
+    var rows = [];
+    if (!d) {
+      rows.push(["Status", "reading…"]);
+    } else {
+      rows.push(["Bot", d.bot && d.bot.running ? "online as " + d.bot.tag : "stopped"]);
+      if (d.bot && d.bot.running) {
+        rows.push(["Servers", String(d.bot.guilds)]);
+        rows.push(["Replies sent", String(d.bot.replies)]);
+      }
+      if (d.bot && d.bot.lastError) rows.push(["Bot error", d.bot.lastError]);
+      rows.push([
+        "Rich Presence",
+        d.presence && d.presence.connected
+          ? "connected · app " + (d.presence.clientId || "?")
+          : d.presence && d.presence.enabled
+            ? "starting…"
+            : "off"
+      ]);
+      if (d.presence && d.presence.lastError) rows.push(["Presence error", d.presence.lastError]);
+      if (d.settings && d.settings.tokenSet) rows.push(["Saved token", d.settings.tokenHint]);
+    }
+    if (state.discord.message) rows.push(["Last action", state.discord.message]);
+    return rows
+      .map(function (row) {
+        return '<div class="kv"><span>' + esc(row[0]) + '</span><span class="kv__value">' + esc(row[1]) + "</span></div>";
+      })
+      .join("");
+  }
+
+  function paintDiscord() {
+    var host = document.getElementById("discord-status");
+    if (host) host.innerHTML = discordStatusHtml();
+    var toggle = document.querySelector('[data-action="discord-presence"]');
+    if (toggle) {
+      var presence = state.discord.status && state.discord.status.presence;
+      toggle.textContent = presence && (presence.enabled || presence.connected) ? "Turn presence off" : "Turn presence on";
+    }
   }
 
   function scheduleSettingsSave(key) {
@@ -1934,6 +2043,83 @@
           await refreshPerformance();
         } catch (error) {
           notify(error.message, true);
+        }
+        break;
+      }
+      case "discord-test": {
+        state.discord.message = "Checking the token with discord.com…";
+        paintDiscord();
+        try {
+          var me = await api.discord.test(state.settings.discordToken || undefined);
+          state.discord.message = "Token works: " + (me.globalName || me.username) + " (" + me.id + ")";
+          notify("Discord token is valid · " + (me.globalName || me.username));
+        } catch (error) {
+          state.discord.message = error.message;
+          notify(error.message, true);
+        }
+        paintDiscord();
+        break;
+      }
+      case "discord-start": {
+        try {
+          await saveSettingsIgnoringErrors();
+          state.discord.message = "Starting the bot…";
+          paintDiscord();
+          var started = await api.discord.start();
+          state.discord.status = await api.discord.status();
+          state.discord.message = started.running ? "Bot online as " + started.tag : "The bot did not come online.";
+          notify(started.running ? "Discord bot online as " + started.tag : "The bot did not come online.", !started.running);
+        } catch (error) {
+          state.discord.message = error.message;
+          notify(error.message, true);
+        }
+        paintDiscord();
+        break;
+      }
+      case "discord-stop": {
+        try {
+          await api.discord.stop();
+          state.discord.message = "Bot stopped.";
+          notify("Discord bot stopped.");
+        } catch (error) {
+          state.discord.message = error.message;
+          notify(error.message, true);
+        }
+        await refreshDiscord();
+        break;
+      }
+      case "discord-invite": {
+        try {
+          var invite = await api.discord.invite();
+          if (!invite) {
+            notify("Add a bot token first so the application id can be read.", true);
+            break;
+          }
+          await api.system.openExternal(invite);
+          state.discord.message = "Invite link opened: " + invite;
+          paintDiscord();
+        } catch (error) {
+          state.discord.message = error.message;
+          notify(error.message, true);
+        }
+        break;
+      }
+      case "discord-presence": {
+        try {
+          var discordState = await api.discord.status();
+          if (discordState.presence.enabled || discordState.presence.connected) {
+            await api.discord.presenceStop();
+            notify("Rich Presence cleared.");
+          } else {
+            await saveSettingsIgnoringErrors();
+            await api.discord.presenceStart({ appId: state.settings.discordAppId || undefined });
+            notify("Rich Presence connected. Check your Discord profile.");
+          }
+          await refreshDiscord();
+        } catch (error) {
+          state.discord.message = error.message;
+          notify(error.message, true);
+          paintDiscord();
         }
         break;
       }

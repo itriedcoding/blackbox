@@ -21,6 +21,7 @@ import { readGgufInfo } from "./lib/gguf.js";
 import { describeChanges, recommendSettings } from "./lib/optimize.js";
 import { registerStudio } from "./lib/studio-ipc.js";
 import { registerIde } from "./lib/ide-ipc.js";
+import { registerDiscord } from "./lib/discord-ipc.js";
 import * as updates from "./lib/updates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -418,6 +419,33 @@ ipcMain.handle("settings:set", (_event, patch) => {
   if (allowed.hfToken !== undefined) {
     allowed.hfToken = String(allowed.hfToken ?? "").trim();
   }
+  if (allowed.discordToken !== undefined) {
+    allowed.discordToken = String(allowed.discordToken ?? "").trim();
+  }
+  if (allowed.discordChannelId !== undefined) {
+    allowed.discordChannelId = String(allowed.discordChannelId ?? "").trim().slice(0, 32);
+  }
+  if (allowed.discordAppId !== undefined) {
+    allowed.discordAppId = String(allowed.discordAppId ?? "").trim().slice(0, 32);
+  }
+  if (allowed.discordLogoUrl !== undefined) {
+    allowed.discordLogoUrl = String(allowed.discordLogoUrl ?? "").trim().slice(0, 256);
+  }
+  if (allowed.discordPersona !== undefined) {
+    allowed.discordPersona = String(allowed.discordPersona ?? "").slice(0, 800);
+  }
+  if (allowed.discordMaxTokens !== undefined) {
+    allowed.discordMaxTokens = Math.min(1024, Math.max(32, Math.round(Number(allowed.discordMaxTokens) || 320)));
+  }
+  if (allowed.discordCooldownMs !== undefined) {
+    allowed.discordCooldownMs = Math.min(60000, Math.max(0, Math.round(Number(allowed.discordCooldownMs) || 0)));
+  }
+  if (allowed.discordStartWithApp !== undefined) {
+    allowed.discordStartWithApp = Boolean(allowed.discordStartWithApp);
+  }
+  if (allowed.discordPresenceOnLaunch !== undefined) {
+    allowed.discordPresenceOnLaunch = Boolean(allowed.discordPresenceOnLaunch);
+  }
   const next = store.writeSettings(allowed);
   catalogCache.at = 0;
   return next;
@@ -673,6 +701,11 @@ if (!app.requestSingleInstanceLock()) {
     registerIde({ send, getWindow: () => mainWindow }).catch((error) => {
       console.error("Code workspace failed to start:", error);
     });
+    try {
+      registerDiscord({ send });
+    } catch (error) {
+      console.error("Discord features failed to start:", error);
+    }
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

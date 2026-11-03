@@ -220,6 +220,38 @@ really hands the memory back; the next message loads the model again.
 `npm run verify:perf` covers the arithmetic headlessly: thread sizing, context
 fitting, the model's own context ceiling, the does-not-fit case, and the change list.
 
+## Discord bot and presence
+
+Settings → **Discord** runs a real bot on the model that is loaded in the app, and
+shows what you are running in your Discord profile.
+
+1. Create an application at https://discord.com/developers/applications, open
+   **Bot → Reset Token**, and paste the token into Settings → Discord. Leave the
+   field empty later to keep the saved token.
+2. Turn on **Message Content Intent** in Bot → Privileged Gateway Intents. Without
+   it Discord refuses the login and the app says exactly that.
+3. Press **Invite link** to add the bot to a server (view channels, send messages,
+   embed links, read history). **Test token** checks it against discord.com before
+   anything else happens.
+4. Press **Start bot**. It answers DMs, @mentions, and messages in the channel ID you
+   configure, using the loaded model through the same engine the window uses. Replies
+   are split at Discord's 2000-character cap, history is kept per channel (last four
+   exchanges), and each user has a cooldown so one person cannot pin the CPU.
+
+The token is stored in `settings.json` on your machine and only sent to discord.com.
+
+**Rich Presence** needs no token: it uses Discord's local RPC socket and the
+application ID (read from the bot token, or paste `Application ID` explicitly).
+Press **Turn presence on** with the Discord desktop app running. The activity shows
+the loaded model, its context window and the backend, and carries this app's logo as
+`large_image` — Discord accepts an https image URL for that field, so no asset upload
+is needed. `Presence logo` accepts any https PNG/JPEG/WebP URL or an asset key you
+uploaded in the Developer Portal.
+
+Presence is implemented in `electron/lib/discord-rpc.js` against the RPC protocol
+itself (framing, handshake, `SET_ACTIVITY`), so it adds no dependency. The bot uses
+`discord.js`, which ships inside the installer.
+
 ## Verify the engine
 
 ```bash
