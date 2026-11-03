@@ -51,6 +51,37 @@ npm start
 npm 11+ does not run dependency install scripts by default. If `npm start` reports that the
 Electron binary is missing, run `node node_modules/electron/install.js` once and start again.
 
+## Updating
+
+The app updates itself from GitHub releases. A button at the bottom of the sidebar
+shows **Check for updates**; six seconds after launch the app checks quietly on
+its own and the button changes only when there is something to say.
+
+- It reads `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`,
+the manifest the release workflow writes beside each installer. It carries the
+version, asset name, exact byte size and SHA-256 of that build.
+- Only a strictly newer version is offered. A missing manifest (older releases)
+is treated as "no update", not as an error.
+- **Update to X** downloads the installer with live progress; while it downloads
+the button becomes a cancel button.
+- The download is hashed as it streams and must match **both** the manifest's size
+and SHA-256. A mismatch deletes the file and refuses to run it.
+- **Restart and update** closes the app, then a detached PowerShell waits for the
+process to exit, runs the NSIS installer silently and starts the new build. Models,
+chats and settings live in `%APPDATA%` and are untouched.
+
+Honest limits: installing is Windows-only and only enabled in the packaged app
+(`app.isPackaged`); a development run says so instead of pretending. The updater
+never trusts a URL from the manifest — it builds the download URL from the version
+and asset name — and it re-hashes the file immediately before running it. What it
+cannot protect against is the publisher account itself being compromised, since
+the manifest is served from the same place as the binary. Nothing installs without
+the button being pressed.
+
+```bash
+npm run verify:updates   # version ordering, manifest validation, verified download, tamper rejection
+```
+
 ## Build the Windows installer
 
 On Windows x64:

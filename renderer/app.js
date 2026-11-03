@@ -37,7 +37,8 @@
     pinned: true,
     settingsSaveTimer: null,
     searchTimer: null,
-    diagnostics: null
+    diagnostics: null,
+    updates: { status: "idle", current: null, latest: null, manifest: null, percent: null, error: null }
   };
 
   // ---------------------------------------------------------------- helpers
@@ -1455,10 +1456,130 @@
     if (state.view === "models") renderModels();
   }
 
+  // ---------------------------------------------------------------- updates
+
+  function paintUpdateButton() {
+    var button = document.getElementById("update-btn");
+    if (!button) return;
+    var label = document.getElementById("update-label");
+    var bar = document.getElementById("update-bar");
+    var updates = state.updates;
+
+    var text = "Check for updates";
+    if (updates.status === "checking") text = "Checking for updates…";
+    else if (updates.status === "available") text = "Update to " + updates.latest;
+    else if (updates.status === "downloading") text = updates.percent == null ? "Downloading…" : "Downloading " + Math.round(updates.percent) + "%";
+    else if (updates.status === "ready") text = "Restart and update";
+    else if (updates.status === "installing") text = "Installing…";
+    else if (updates.status === "uptodate") text = "Up to date · v" + (updates.latest || updates.current || "?");
+    else if (updates.status === "error") text = "Update check failed";
+
+    if (label) label.textContent = text;
+    button.classList.toggle("is-available", updates.status === "available" || updates.status === "ready");
+    button.classList.toggle("is-busy", updates.status === "checking" || updates.status === "downloading" || updates.status === "installing");
+    button.setAttribute(
+      "title",
+      updates.error
+        ? updates.error
+        : updates.status === "downloading"
+          ? "Click to cancel the download"
+          : "Check GitHub releases and install a newer version",
+    );
+    if (bar) {
+      bar.style.width =
+        updates.status === "ready"
+          ? "100%"
+          : updates.status === "downloading" && updates.percent != null
+            ? Math.max(2, Math.min(100, updates.percent)) + "%"
+            : "0%";
+    }
+  }
+
+  async function checkUpdates(manual) {
+    var updates = state.updates;
+    if (updates.status === "checking" || updates.status === "downloading" || updates.status === "installing") return;
+    updates.status = "checking";
+    updates.error = null;
+    paintUpdateButton();
+    try {
+      var result = await api.updates.check();
+      updates.current = result.current || updates.current;
+      if (result.available) {
+        updates.status = "available";
+        updates.latest = result.latest;
+        updates.manifest = result.manifest;
+        notify("Blackbox " + result.latest + " is available. Click Update to install it.");
+      } else {
+        updates.status = "uptodate";
+        updates.latest = result.latest || result.current;
+        updates.manifest = null;
+        if (manual) notify("You are on the latest version · v" + updates.current);
+      }
+    } catch (error) {
+      updates.status = "error";
+      updates.error = error.message;
+      if (manual) notify(error.message, true);
+    }
+    paintUpdateButton();
+  }
+
+  async function downloadUpdatePackage() {
+    var updates = state.updates;
+    if (!updates.manifest) {
+      updates.status = "idle";
+      return checkUpdates(true);
+    }
+    updates.status = "downloading";
+    updates.percent = 0;
+    paintUpdateButton();
+    try {
+      var result = await api.updates.download(updates.manifest);
+      updates.status = "ready";
+      updates.percent = 100;
+      updates.path = result.path;
+      notify("Blackbox " + result.version + " downloaded and verified. Click again to restart into it.");
+    } catch (error) {
+      updates.status = "error";
+      updates.error = error.message;
+      notify(error.message, true);
+    }
+    paintUpdateButton();
+  }
+
+  async function installUpdatePackage() {
+    var updates = state.updates;
+    updates.status = "installing";
+    paintUpdateButton();
+    try {
+      await api.updates.install();
+      notify("Installing " + (updates.latest || "the update") + " and restarting Blackbox…");
+    } catch (error) {
+      updates.status = "error";
+      updates.error = error.message;
+      notify(error.message, true);
+      paintUpdateButton();
+    }
+  }
+
+  async function onUpdateClick() {
+    var status = state.updates.status;
+    if (status === "available") return downloadUpdatePackage();
+    if (status === "ready") return installUpdatePackage();
+    if (status === "downloading") {
+      await api.updates.cancel();
+      return;
+    }
+    if (status === "installing") return;
+    return checkUpdates(true);
+  }
+
   // ---------------------------------------------------------------- actions
 
   async function handleAction(action, element, event) {
     switch (action) {
+      case "update":
+        await onUpdateClick();
+        break;
       case "new-chat":
         await newChat();
         break;
@@ -1805,6 +1926,14 @@
     state.info = info;
     state.settings = info.settings;
     state.engine = Object.assign(state.engine, await api.engine.status());
+    state.updates.current = info.version || null;
+
+    api.updates.onProgress(function (payload) {
+      if (!payload) return;
+      state.updates.percent = payload.percent;
+      if (state.updates.status === "downloading") paintUpdateButton();
+    });
+    paintUpdateButton();
 
     await refreshChats();
     await refreshModels();
@@ -1816,6 +1945,12 @@
     }
 
     renderAll();
+
+    // Automatic check shortly after launch; silence here is deliberate, the
+    // sidebar button changes only when there is something to say.
+    setTimeout(function () {
+      checkUpdates(false);
+    }, 6000);
 
     if (state.settings.activeModelPath && state.models.some(function (model) { return model.path === state.settings.activeModelPath; })) {
       await loadModel(state.settings.activeModelPath);

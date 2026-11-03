@@ -78,6 +78,36 @@ jobs:
             $installer.FullName
           if ($LASTEXITCODE -ne 0) { throw "Sigstore verification failed with $LASTEXITCODE" }
 
+      # The in-app updater reads this manifest from releases/latest, so it has to
+      # describe exactly the bytes being published, not whatever the build hoped.
+      - name: Write update manifest
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Installer was not produced." }
+          $version = node -p "require('./package.json').version"
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          [ordered]@{
+            version = $version
+            asset = $installer.Name
+            size = $installer.Length
+            sha256 = $hash
+            publishedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          } | ConvertTo-Json | Set-Content -Path "dist/latest.json" -Encoding utf8
+          "$hash  $($installer.Name)" | Set-Content -Path "dist/$($installer.Name).sha256" -Encoding ascii
+          Get-Content "dist/latest.json"
+
+      - name: Check the update manifest against the installer
+        shell: pwsh
+        run: |
+          $manifest = Get-Content "dist/latest.json" -Raw | ConvertFrom-Json
+          $installer = Get-ChildItem "dist/Blackbox-*-win-x64.exe" | Select-Object -First 1
+          if ($manifest.asset -ne $installer.Name) { throw "Manifest names $($manifest.asset) but the build produced $($installer.Name)." }
+          if ([int64]$manifest.size -ne $installer.Length) { throw "Manifest size does not match the installer." }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          if ($manifest.sha256 -ne $hash) { throw "Manifest SHA-256 does not match the installer." }
+          Write-Host "::notice title=manifest::latest.json describes $($installer.Name) ($($manifest.size) bytes, sha256 $($manifest.sha256))."
+
       - name: Verify installer signature
         shell: pwsh
         env:
@@ -127,6 +157,8 @@ jobs:
           path: |
             dist/Blackbox-*-win-x64.exe
             dist/Blackbox-*-win-x64.exe.sigstore.json
+            dist/Blackbox-*-win-x64.exe.sha256
+            dist/latest.json
           if-no-files-found: error
 
       - name: Publish release
@@ -139,9 +171,12 @@ jobs:
           if (-not $installer) { throw "Installer was not produced." }
           $bundle = "$($installer.FullName).sigstore.json"
           if (-not (Test-Path $bundle)) { throw "Sigstore bundle was not produced." }
+          $checksum = "$($installer.FullName).sha256"
+          $manifestPath = "dist/latest.json"
+          if (-not (Test-Path $manifestPath)) { throw "Update manifest was not produced." }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag $installer.FullName $bundle --title "Blackbox $tag" --generate-notes --latest
+            gh release create $tag $installer.FullName $bundle $checksum $manifestPath --title "Blackbox $tag" --generate-notes --latest
           } else {
-            gh release upload $tag $installer.FullName $bundle --clobber
+            gh release upload $tag $installer.FullName $bundle $checksum $manifestPath --clobber
           }

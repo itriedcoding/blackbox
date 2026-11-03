@@ -10,7 +10,7 @@
 
   // Download links point at the release asset; if a visitor has no network the
   // browser handles the error, but make the size expectation explicit once.
-  document.querySelectorAll('a[href*="Blackbox-1.6.0-win-x64.exe"]').forEach(function (link) {
+  document.querySelectorAll('a[href*="Blackbox-1.7.0-win-x64.exe"]').forEach(function (link) {
     link.addEventListener("click", function () {
       link.setAttribute("data-clicked", "true");
     });

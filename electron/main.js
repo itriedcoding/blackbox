@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +20,7 @@ import {
 import { readGgufInfo } from "./lib/gguf.js";
 import { registerStudio } from "./lib/studio-ipc.js";
 import { registerIde } from "./lib/ide-ipc.js";
+import * as updates from "./lib/updates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes("--dev");
@@ -208,6 +210,7 @@ ipcMain.handle("system:info", () => {
   const settings = store.readSettings();
   return {
     ...systemInfo(),
+    version: app.getVersion(),
     memory: memoryPicture(),
     threadOptions: threadOptions(),
     engineVersion: engine.engineVersion,
@@ -230,6 +233,81 @@ ipcMain.handle("app:open-external", async (_event, url) => {
     return true;
   }
   return false;
+});
+
+// --------------------------------------------------------------- IPC: updates
+
+let updateDownload = null;
+let updateReady = null;
+
+ipcMain.handle("updates:check", async () => updates.checkForUpdate({ currentVersion: app.getVersion() }));
+
+ipcMain.handle("updates:download", async (event, manifest) => {
+  if (updateDownload) throw new Error("An update is already downloading.");
+  const verified = updates.normalizeManifest(manifest);
+  const destination = path.join(app.getPath("temp"), `Blackbox-update-${verified.version}.exe`);
+  const controller = new AbortController();
+  updateDownload = controller;
+  updateReady = null;
+
+  try {
+    const result = await updates.downloadUpdate({
+      manifest: verified,
+      destination,
+      signal: controller.signal,
+      onProgress: (payload) => {
+        if (!event.sender.isDestroyed()) event.sender.send("updates:progress", { version: verified.version, ...payload });
+      },
+    });
+    updateReady = { ...result, version: verified.version };
+    return { version: verified.version, path: result.path, bytes: result.bytes, sha256: result.sha256 };
+  } finally {
+    updateDownload = null;
+  }
+});
+
+ipcMain.handle("updates:cancel", () => {
+  if (!updateDownload) return false;
+  updateDownload.abort();
+  return true;
+});
+
+/**
+ * Installs the verified download. The running app holds its own .exe open, so a
+ * detached PowerShell waits for this process to exit, runs the NSIS installer in
+ * silent mode, then starts the new build. Nothing else is downloaded and the
+ * installer path is the one this process wrote and hashed, never one the window
+ * supplied.
+ */
+ipcMain.handle("updates:install", async () => {
+  if (process.platform !== "win32") throw new Error("In-app updates install the Windows build only.");
+  if (!app.isPackaged) throw new Error("Updates install only in the packaged app, not in a development run.");
+  if (!updateReady) throw new Error("No verified update is waiting. Check for updates first.");
+
+  const digest = await updates.sha256File(updateReady.path);
+  if (digest !== updateReady.sha256) {
+    updateReady = null;
+    throw new Error("The downloaded installer changed on disk after it was verified, so it will not be run.");
+  }
+
+  const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    `Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue`,
+    "Start-Sleep -Milliseconds 700",
+    `Start-Process -FilePath ${quote(updateReady.path)} -ArgumentList '/S' -Wait`,
+    `Start-Process -FilePath ${quote(process.execPath)}`,
+  ].join("; ");
+
+  const child = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
+
+  setTimeout(() => app.quit(), 300);
+  return { installing: true, version: updateReady.version };
 });
 
 // -------------------------------------------------------------- IPC: settings

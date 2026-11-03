@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld("blackbox", {
     openModelsFolder: () => ipcRenderer.invoke("system:open-models-folder"),
     openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
   },
+  updates: {
+    check: () => ipcRenderer.invoke("updates:check"),
+    download: (manifest) => ipcRenderer.invoke("updates:download", manifest),
+    install: () => ipcRenderer.invoke("updates:install"),
+    cancel: () => ipcRenderer.invoke("updates:cancel"),
+    onProgress: subscribe("updates:progress"),
+  },
   settings: {
     get: () => ipcRenderer.invoke("settings:get"),
     set: (patch) => ipcRenderer.invoke("settings:set", patch),

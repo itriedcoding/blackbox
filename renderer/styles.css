@@ -1881,3 +1881,35 @@ input[type="range"]:hover::-webkit-slider-thumb {
     display: none;
   }
 }
+
+/* -------------------------------------------------------------- updates */
+.update-btn {
+  position: relative;
+  width: 100%;
+  margin: 6px 0 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.update-btn.is-available {
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.update-btn.is-busy {
+  opacity: 0.72;
+  cursor: progress;
+}
+
+.update-btn__bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 2px;
+  background: var(--ink);
+  opacity: 0.55;
+  transition: width 160ms ease;
+}
